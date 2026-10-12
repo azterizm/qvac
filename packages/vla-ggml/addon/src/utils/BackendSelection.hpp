@@ -88,4 +88,8 @@ ggml_backend_dev_t pickBestGpuDevice(
     const DeviceInterface& devI,
     const std::vector<std::string>& backendOverride);
 
+// The override as the caller wrote it, "cuda,vulkan", for log and error text.
+std::string
+describeBackendOverride(const std::vector<std::string>& backendOverride);
+
 } // namespace vla_backend_selection

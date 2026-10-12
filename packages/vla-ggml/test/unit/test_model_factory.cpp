@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include "model-interface/model_factory.hpp"
+#include "utils/BackendSelection.hpp"
 
 using qvac_lib_infer_vla_ggml::createVlaModelFromGguf;
 using qvac_lib_infer_vla_ggml::sniffGgufArchitecture;
@@ -189,6 +190,80 @@ TEST(VlaModelFactory, RejectsUnknownArchitecture) {
   } catch (const std::runtime_error& e) {
     const std::string what = e.what();
     EXPECT_NE(what.find("not_a_real_arch"), std::string::npos) << what;
+  }
+  cleanupTempFile(path);
+}
+
+// ─── Backend override never lands on CPU ────────────────────────────────────
+
+// Backend selection runs before any of the three loaders reads the GGUF, so a
+// metadata-only file is enough to see which error comes first. On a host with
+// no device for the named family the loader must refuse with "matched no
+// usable GPU device" instead of quietly taking the CPU path and failing later
+// on a missing tensor. On a host that does have a GPU, selection succeeds and
+// that message must be absent; what follows is either the missing-tensor
+// error or, for a loader that allocates device buffers before it checks the
+// tensor list (pi05 on Metal), the strict "weight alloc failed" refusal. Both
+// branches are asserted so the test means something on CPU-only CI runners
+// and on GPU dev boxes alike.
+namespace {
+
+constexpr const char* NO_DEVICE_MESSAGE = "matched no usable GPU device";
+
+void expectOverrideStrictness(const char* arch) {
+  const std::vector<std::string> override{"cuda"};
+  const bool hostHasGpu =
+      vla_backend_selection::pickBestGpuDevice(override) != nullptr;
+  const std::string path = writeTempGguf(arch);
+  ASSERT_FALSE(path.empty());
+  try {
+    (void)createVlaModelFromGguf(
+        path, /*forceCpu=*/false, /*backendsDir=*/"", {}, override);
+    FAIL() << arch << ": load should have thrown (no tensors)";
+  } catch (const std::runtime_error& e) {
+    const std::string what = e.what();
+    const bool refusedForNoDevice =
+        what.find(NO_DEVICE_MESSAGE) != std::string::npos;
+    if (hostHasGpu) {
+      EXPECT_FALSE(refusedForNoDevice)
+          << arch << ": a usable GPU exists, so the loader must not claim "
+          << "there is none: " << what;
+    } else {
+      EXPECT_TRUE(refusedForNoDevice)
+          << arch << ": no GPU for 'cuda', so the loader must refuse the "
+          << "override rather than fall back to CPU: " << what;
+      EXPECT_NE(what.find("not falling back to CPU"), std::string::npos)
+          << what;
+    }
+  }
+  cleanupTempFile(path);
+}
+
+} // namespace
+
+TEST(VlaModelFactory, Pi05BackendOverrideNeverFallsBackToCpu) {
+  expectOverrideStrictness("pi05");
+}
+
+TEST(VlaModelFactory, GrootBackendOverrideNeverFallsBackToCpu) {
+  expectOverrideStrictness("groot");
+}
+
+TEST(VlaModelFactory, SmolvlaBackendOverrideNeverFallsBackToCpu) {
+  expectOverrideStrictness("smolvla");
+}
+
+TEST(VlaModelFactory, AutoBackendStillFallsBackToCpu) {
+  // 'auto' keeps the fallback: with no override the only error is the missing
+  // tensor, whatever the host has.
+  const std::string path = writeTempGguf("pi05");
+  ASSERT_FALSE(path.empty());
+  try {
+    (void)createVlaModelFromGguf(path, /*forceCpu=*/false, /*backendsDir=*/"");
+    FAIL() << "load should have thrown (no tensors)";
+  } catch (const std::runtime_error& e) {
+    const std::string what = e.what();
+    EXPECT_EQ(what.find("backend override"), std::string::npos) << what;
   }
   cleanupTempFile(path);
 }

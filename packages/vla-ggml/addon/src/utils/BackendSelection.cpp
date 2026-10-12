@@ -161,6 +161,18 @@ pickBestGpuDevice(const std::vector<std::string>& backendOverride) {
   return pickBestGpuDevice(kGgmlDevices, backendOverride);
 }
 
+std::string
+describeBackendOverride(const std::vector<std::string>& backendOverride) {
+  std::string out;
+  for (const std::string& family : backendOverride) {
+    if (!out.empty()) {
+      out += ',';
+    }
+    out += family;
+  }
+  return out;
+}
+
 ggml_backend_dev_t pickBestGpuDevice(
     const DeviceInterface& devI,
     const std::vector<std::string>& backendOverride) {

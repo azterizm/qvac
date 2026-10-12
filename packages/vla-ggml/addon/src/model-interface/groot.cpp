@@ -1422,6 +1422,10 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   m->backend_name = cpuName != nullptr ? cpuName : "CPU";
   m->has_gpu = false;
 
+  // Same rule as pi05LoadModel: a named backend never lands on CPU silently.
+  const bool strictGpu = !backendOverride.empty();
+  const std::string overrideText =
+      vla_backend_selection::describeBackendOverride(backendOverride);
   if (!forceCpu) {
     ggml_backend_dev_t gpu =
         vla_backend_selection::pickBestGpuDevice(backendOverride);
@@ -1438,7 +1442,16 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
             std::string("grootLoadModel: using GPU backend: ") +
                 (bname != nullptr ? bname : "?") + " (" +
                 (ddesc != nullptr ? ddesc : "?") + ")");
+      } else if (strictGpu) {
+        throw std::runtime_error(
+            "grootLoadModel: backend override '" + overrideText +
+            "' selected a device but ggml_backend_dev_init returned null; "
+            "not falling back to CPU");
       }
+    } else if (strictGpu) {
+      throw std::runtime_error(
+          "grootLoadModel: backend override '" + overrideText +
+          "' matched no usable GPU device; not falling back to CPU");
     }
   }
 
@@ -1644,6 +1657,13 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
     const int64_t nTensorsInGguf = gguf_get_n_tensors(m->gguf);
     if (!grootLoadWeightsAllocCopy(
             *m, ggufPath.c_str(), m->gguf, buft, dataOffset, nTensorsInGguf)) {
+      if (strictGpu) {
+        // ~GrootModelInternal frees bufs_w, the GPU backend, gguf and ctx_w.
+        throw std::runtime_error(
+            "grootLoadModel: backend override '" + overrideText +
+            "' GPU weight alloc failed on " + m->backend_name +
+            "; not falling back to CPU");
+      }
       QLOG_IF(
           Priority::WARNING,
           "grootLoadModel: GPU weight alloc failed — falling back to CPU");

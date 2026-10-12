@@ -166,9 +166,12 @@ const { actions, stats } = await response.await()
 ```
 
 The example above is SmolVLA (2 cameras, continuous `state` vector). π₀.₅ takes
-up to 3 images and ignores the `state` argument — the caller instead encodes
-robot state as text inside the prompt (`Task: …, State: …;\nAction:`) before
-tokenising (see [Models](#models)). Check `hparams.numCameras` /
+1 to `hparams.numCameras` images, positionally the leading cameras, and ignores
+the `state` argument — the caller instead encodes robot state as text inside
+the prompt (`Task: …, State: …;\nAction:`) before tokenising (see
+[Models](#models)). A checkpoint fine-tuned with an empty camera slot, such as
+`lerobot/pi05_libero_finetuned_v044` with its `empty_camera_0` third view,
+runs by passing only the real views. Check `hparams.numCameras` /
 `hparams.stateInputMode` after `load()` rather than hard-coding the input shape.
 
 ## JavaScript API
@@ -214,6 +217,12 @@ device is absent is skipped and selection continues; an unrecognised name is
 rejected. The Adreno rules above still apply, so an override can never
 resurrect a device they rejected. Setting `CUDA_VISIBLE_DEVICES=-1` in the
 environment is an equivalent way to force Vulkan without touching the config.
+
+A GPU list never ends on CPU, unlike `'auto'`. If no usable GPU matches, the
+backend fails to init, or the weights do not fit on the device (Jetson Orin
+8GB, `cudaMalloc` of the 3.7 GB weight buffer fails with NvMap error 12),
+`load()` rejects with `FAILED_TO_LOAD_WEIGHTS` instead of running on CPU at
+50x the latency. `model.backendName` after `load()` names the device in use.
 
 ## Built With
 

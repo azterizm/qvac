@@ -1105,11 +1105,19 @@ static std::unique_ptr<Pi05ModelInternal> pi05LoadModel(
   m->has_gpu = false;
 
   // Try to upgrade to a GPU device unless the caller forced CPU.
-  // Failure here is non-fatal — we keep the CPU backend already wired
-  // above. Adreno GPUs are filtered out by
+  // Under 'auto' a failure here is non-fatal — we keep the CPU backend
+  // already wired above. Adreno GPUs are filtered out by
   // vla_backend_selection::pickBestGpuDevice() so older Snapdragon
   // devices fall through to CPU rather than crash on
   // ggml_backend_dev_init. Mirrors smolvla.cpp::try_init_gpu_backend.
+  // An explicit `backend` family list is a request, not a hint. Landing on
+  // CPU after one looks like success at 50x the latency (Jetson Orin 8GB,
+  // weight cudaMalloc failed with NvMap error 12 and warmup went from 1 s to
+  // 50 s per chunk), so every CPU fallback below throws instead when the
+  // caller named a backend. 'auto' keeps the fallback.
+  const bool strictGpu = !backendOverride.empty();
+  const std::string overrideText =
+      vla_backend_selection::describeBackendOverride(backendOverride);
   if (!forceCpu) {
     ggml_backend_dev_t gpu =
         vla_backend_selection::pickBestGpuDevice(backendOverride);
@@ -1126,12 +1134,21 @@ static std::unique_ptr<Pi05ModelInternal> pi05LoadModel(
             std::string("pi05LoadModel: using GPU backend: ") +
                 (bname != nullptr ? bname : "?") + " (" +
                 (ddesc != nullptr ? ddesc : "?") + ")");
+      } else if (strictGpu) {
+        throw std::runtime_error(
+            "pi05LoadModel: backend override '" + overrideText +
+            "' selected a device but ggml_backend_dev_init returned null; "
+            "not falling back to CPU");
       } else {
         QLOG_IF(
             Priority::WARNING,
             "pi05LoadModel: ggml_backend_dev_init returned null; "
             "staying on CPU");
       }
+    } else if (strictGpu) {
+      throw std::runtime_error(
+          "pi05LoadModel: backend override '" + overrideText +
+          "' matched no usable GPU device; not falling back to CPU");
     } else {
       QLOG_IF(Priority::INFO, "pi05LoadModel: no GPU device picked; using CPU");
     }
@@ -1273,6 +1290,13 @@ static std::unique_ptr<Pi05ModelInternal> pi05LoadModel(
     const int64_t nTensorsInGguf = gguf_get_n_tensors(m->gguf);
     if (!pi05LoadWeightsAllocCopy(
             *m, ggufPath.c_str(), m->gguf, buft, dataOffset, nTensorsInGguf)) {
+      if (strictGpu) {
+        // ~Pi05ModelInternal frees the GPU backend, gguf and ctx_w.
+        throw std::runtime_error(
+            "pi05LoadModel: backend override '" + overrideText +
+            "' GPU weight alloc failed on " + m->backend_name +
+            "; not falling back to CPU");
+      }
       QLOG_IF(
           Priority::WARNING,
           "pi05LoadModel: GPU weight alloc failed — falling back to CPU");

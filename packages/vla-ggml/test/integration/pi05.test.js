@@ -1040,3 +1040,97 @@ test(
     }
   }
 )
+
+// pi05 takes 1..numCameras images. A LIBERO fine-tune such as
+// lerobot/pi05_libero_finetuned_v044 has two real views plus an
+// `empty_camera_0` slot that openpi masks out of attention, so a caller
+// runs it by passing only the two real views. The 3-camera pi05_base fixture
+// stands in for that here: the first two cameras must run, 0 and
+// numCameras+1 must be rejected before any native call. When
+// PI05_TEST_ACTIONS_2CAM points at a safetensors file holding
+// `ode.actions_final` from the PyTorch oracle with the third camera masked,
+// the two-camera actions are also held to the CPU parity bar.
+test(
+  'pi05 integration: accepts fewer images than numCameras (needs GGUF)',
+  { timeout: 1200000, skip: _skipMobilePi05 },
+  async (t) => {
+    if (_assetsState.state === 'SKIP') {
+      t.comment('skipping: ' + SKIP_REASON)
+      return
+    }
+    if (_assetsState.state === 'FAIL') {
+      t.fail(_assetsState.reason)
+      return
+    }
+
+    const inputs = await _loadTestInputs()
+    if (!inputs) {
+      t.fail('_loadTestInputs returned null despite asset state ' + _assetsState.state)
+      return
+    }
+
+    const model = new VlaModel({
+      files: { model: [path.resolve(inputs.ggufPath)] },
+      config: { verbosity: 1 }
+    })
+    try {
+      await model.load({ backend: 'cpu' })
+      const hp = model.hparams
+      t.is(hp.numCameras, 3, 'fixture GGUF has three cameras')
+
+      const mkInput = (images) => ({
+        images,
+        imgWidth: 224,
+        imgHeight: 224,
+        state: new Float32Array(0),
+        tokens: inputs.tokens,
+        mask: inputs.mask,
+        noise: inputs.noise
+      })
+
+      for (const [images, label] of [
+        [[], 'zero images'],
+        [[...inputs.images, inputs.images[0]], 'numCameras + 1 images']
+      ]) {
+        let rejectErr = null
+        try {
+          await model.run(mkInput(images))
+        } catch (e) {
+          rejectErr = e
+        }
+        t.ok(rejectErr, `run() rejects ${label}`)
+      }
+
+      const twoCam = inputs.images.slice(0, 2)
+      const response = await model.run(mkInput(twoCam))
+      const { actions } = await response.await()
+      t.ok(actions instanceof Float32Array, 'two-camera run produced actions')
+      t.is(actions.length, hp.chunkSize * hp.actionDim, 'two-camera actions length')
+      let finite = true
+      for (let i = 0; i < actions.length; i++) {
+        if (!Number.isFinite(actions[i])) {
+          finite = false
+          break
+        }
+      }
+      t.ok(finite, 'two-camera actions are all finite')
+
+      const refPath = process.env.PI05_TEST_ACTIONS_2CAM
+      if (_assetsState.state === 'HAVE_DESKTOP' && refPath) {
+        const expected = loadSafetensors(refPath).get('ode.actions_final')
+        t.is(expected.length, actions.length, 'two-camera oracle length')
+        const cos = cosineSim(actions, expected)
+        t.comment(`two-camera cos vs PyTorch (third camera masked): ${cos.toFixed(6)}`)
+        t.ok(cos > 0.999, `two-camera cos ${cos.toFixed(6)} > 0.999 (cpu bar)`)
+      } else {
+        t.comment('PI05_TEST_ACTIONS_2CAM not set, two-camera parity not checked')
+      }
+
+      // The full three-camera input must still run after the shorter ones.
+      const full = await (await model.run(mkInput(inputs.images))).await()
+      t.is(full.actions.length, hp.chunkSize * hp.actionDim, 'three-camera run still works')
+    } finally {
+      await model.unload().catch(() => {})
+    }
+  }
+)

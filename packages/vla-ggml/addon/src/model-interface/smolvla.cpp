@@ -849,23 +849,41 @@ static bool initCpuBackend(SmolvlaModel& model) {
 // so older Snapdragon devices fall through to CPU rather than crash on
 // `ggml_backend_dev_init`. `force_cpu=true` skips selection entirely so the
 // integration test can run the same hardware both ways.
-static void tryInitGpuBackend(
+// Returns false only when the caller named a backend (`backendOverride`
+// non-empty) and no GPU came up: a named backend never lands on CPU silently,
+// same rule as pi05LoadModel. With 'auto' a missing GPU is the normal CPU path.
+static bool tryInitGpuBackend(
     SmolvlaModel& model, bool forceCpu,
     const std::vector<std::string>& backendOverride) {
   if (forceCpu) {
     QLOG_IF(
         Priority::INFO,
         "smolvla_load_model: force_cpu=true — skipping GPU selection");
+    return true;
   }
+  const bool strictGpu = !backendOverride.empty();
+  const std::string overrideText =
+      vla_backend_selection::describeBackendOverride(backendOverride);
   ggml_backend_dev_t gpu =
-      forceCpu ? nullptr
-               : vla_backend_selection::pickBestGpuDevice(backendOverride);
+      vla_backend_selection::pickBestGpuDevice(backendOverride);
   if (!gpu) {
-    return;
+    if (strictGpu) {
+      model.load_error = "backend override '" + overrideText +
+                         "' matched no usable GPU device; not falling back "
+                         "to CPU";
+      return false;
+    }
+    return true;
   }
   ggml_backend_t gpuBackend = ggml_backend_dev_init(gpu, nullptr);
   if (!gpuBackend) {
-    return;
+    if (strictGpu) {
+      model.load_error = "backend override '" + overrideText +
+                         "' selected a device but ggml_backend_dev_init "
+                         "returned null; not falling back to CPU";
+      return false;
+    }
+    return true;
   }
   model.backend = gpuBackend;
   model.has_gpu = true;
@@ -875,6 +893,7 @@ static void tryInitGpuBackend(
       Priority::INFO,
       std::string("smolvla_load_model: using GPU backend: ") +
           (bname ? bname : "?") + " (" + (ddesc ? ddesc : "?") + ")");
+  return true;
 }
 
 // Read SmolVLA hyperparameters from GGUF metadata. All keys have defaults
@@ -1525,7 +1544,9 @@ bool smolvlaLoadModel(
     model.load_error = "failed to initialise the CPU backend";
     return false;
   }
-  tryInitGpuBackend(model, forceCpu, backendOverride);
+  if (!tryInitGpuBackend(model, forceCpu, backendOverride)) {
+    return false;
+  }
   if (!model.has_gpu) {
     QLOG_IF(Priority::INFO, "smolvla_load_model: using CPU backend");
   }
