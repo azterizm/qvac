@@ -18,41 +18,6 @@ For AI/LLM tools, use [https://docs.qvac.tether.io/llms-full.txt](https://docs.q
 
 > **In-process Bare:** use [`@qvac/inference`](../inference/README.md). `@qvac/bare-sdk` is deprecated; last release is 0.18.2.
 
-## Experimental browser text client
-
-`@qvac/sdk/browser` adapts a browser WASM/WebGPU runtime to the SDK's existing
-`CompletionRun` events and final result. Pass a runtime implementing the exported
-`BrowserRuntime` interface; that runtime owns its Worker, model and WASM assets.
-The browser entry does not start a Bare worker or load native addons.
-
-```typescript
-import { createBrowserClient } from '@qvac/sdk/browser'
-
-const client = createBrowserClient(runtime)
-const modelId = await client.loadModel({ modelSrc: modelUrl, ctxSize: 512 })
-const run = client.completion({
-  modelId,
-  history: [{ role: 'user', content: 'Hello' }],
-  generationParams: { predict: 64, temp: 0 }
-})
-for await (const event of run.events) {
-  if (event.type === 'contentDelta') console.log(event.text)
-}
-console.log((await run.final).contentText)
-await client.unloadModel({ modelId })
-await client.close()
-```
-
-This text-only PoC accepts HTTP(S) model URLs and the runtime's supported context
-size. Sampling options are `predict` (positive bounded output), `temp` and `seed`.
-Output preserves raw reasoning markers; separate thinking events, tools/MCP,
-attachments, durable KV caching and other native SDK options are rejected.
-Cancel an active run with `client.cancel({ requestId: run.requestId })`.
-Cancellation ends the event stream normally and rejects `run.final` with
-`InferenceCancelledError`, retaining partial output. Cancellation latency depends
-on the runtime's cooperative yield points. This browser-only library entry does
-not change native `qvac serve` or `qvac configure` behavior.
-
 ## Supported environments and installation
 
 See https://docs.qvac.tether.io/sdk/getting-started/installation
