@@ -14,7 +14,7 @@ on:
       - '.github/scripts/configure-cpp-build.mjs'
       - 'vcpkg-overlays/**'
   schedule:
-    # Every 2 days for the same reason as on-merge-vcpkg-cache-embed.yml: the
+    # Every 2 days for the same reason as the legacy vcpkg warmers: the
     # cache server prunes an entry after CACHE_CLEANUP_OLDER_THAN_DAYS=5 days
     # without an upload or download, and this keeps the longest gap at 4 days even
     # after one failed run. The hour follows the five legacy warmers' stagger.

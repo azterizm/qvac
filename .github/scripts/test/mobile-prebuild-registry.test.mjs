@@ -1186,9 +1186,9 @@ test('the run-id input documents its precedence and the mutual exclusion', () =>
 test('the documented route is the one docs/ci/MOBILE-ON-DEMAND.md tells people to use', () => {
   const docs = read('docs/ci/MOBILE-ON-DEMAND.md')
   assert.match(docs, /prebuild_run_id/, 'the docs must document the input')
-  const rpcDispatch = docs.split('### ggml-rpc-server dispatch\n')[1]?.split('### Quick start')[0]
-  assert.ok(rpcDispatch, 'the ggml-rpc-server dispatch example must exist')
-  assert.match(rpcDispatch, /--ref main -f ref="refs\/pull\/\$PR\/head"/,
+  const contractDispatch = docs.split('### Packages on the CI contract\n')[1]?.split('### Quick start')[0]
+  assert.ok(contractDispatch, 'the CI contract dispatch example must exist')
+  assert.match(contractDispatch, /--ref main \\\n\s+-f packages=\$PKG -f ref="refs\/pull\/\$PR\/head"/,
     'fork PRs must dispatch an upstream workflow that checks out the PR head')
   // The GPR pin stays documented for the cross-branch / published cases.
   assert.match(docs, /@tetherto\/<addon>-mono/)
