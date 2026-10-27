@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// S3 only for now; the first HuggingFace-sourced package to migrate adds its source.
+// Source "s3" fetches each entry's s3Path into its dest. Without a source, entries carry pinned urls and land in
+// test/model/<name>, as main's cache-models stages them; warm: false entries are left to the tests.
 
 import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -24,25 +25,29 @@ export async function matches(file, entry) {
   return true
 }
 
+const destOf = (name, m) => m.dest ?? `test/model/${name}`
+
 // An entry's `skip` lists <platform>-<arch> hosts that never need it.
 export async function download({
   manifest,
   workdir,
   target,
   host = `${process.platform}-${process.arch}`,
-  fetchObject
+  fetchObject,
+  fetchUrls
 }) {
-  if (manifest.source !== 's3')
-    throw new Error(`models-download supports source "s3" only, got "${manifest.source}"`)
+  if (manifest.source !== undefined && manifest.source !== 's3')
+    throw new Error(`models-download supports source "s3" or pinned urls, got "${manifest.source}"`)
   let fetched = 0
   for (const [name, m] of Object.entries(manifest.models || {})) {
     if (target && m.targets && !m.targets.includes(target)) continue
-    if (m.skip?.includes(host)) continue
-    const file = join(workdir, m.dest)
+    if (m.skip?.includes(host) || m.warm === false) continue
+    const file = join(workdir, destOf(name, m))
     if (await matches(file, m)) continue
     mkdirSync(dirname(file), { recursive: true })
     rmSync(file, { force: true })
-    fetchObject(m.s3Path, file)
+    if (manifest.source === 's3') fetchObject(m.s3Path, file)
+    else fetchUrls(m.urls, file)
     if (!(await matches(file, m)))
       throw new Error(`${name}: downloaded file does not match its pinned size or sha256`)
     fetched++
@@ -61,7 +66,19 @@ async function main(env) {
     fetchObject: (key, file) =>
       execFileSync('aws', ['s3', 'cp', `s3://${env.BUCKET}/${key}`, file, '--only-show-errors'], {
         stdio: 'inherit'
-      })
+      }),
+    // Each mirror in turn, with curl's own retries; a pinned sha256 checks whichever answered.
+    fetchUrls: (urls, file) => {
+      for (const [i, url] of urls.entries()) {
+        try {
+          return execFileSync('curl', ['-fsSL', '--retry', '3', '-o', file, url], {
+            stdio: 'inherit'
+          })
+        } catch (e) {
+          if (i === urls.length - 1) throw e
+        }
+      }
+    }
   })
   console.log(`Fetched ${fetched} model files`)
 }

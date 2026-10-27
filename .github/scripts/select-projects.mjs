@@ -29,6 +29,7 @@ export const TARGETS = [
   'test:backend',
   'test:mobile',
   'cache:models',
+  'benchmark',
   'publish'
 ]
 
@@ -55,11 +56,16 @@ const MOBILE_KEYS = [
   'perTestTimeoutMinutes',
   'perfReport'
 ]
-// Each needs its secret named in mobile-tests.yml's PROJECT_ARN.
+// Each needs its secret named in _mobile.yml's PROJECT_ARN.
 export const DEVICEFARM_PROJECTS = ['LLAMACPP_EMBED']
 
+// benchmark's report configuration reads every other configuration's results, so it runs once, after them, never as a row.
+export const REPORT = 'report'
+const isReport = (target, config) => target === 'benchmark' && config === REPORT
+
 export function configurations(project, target) {
-  return Object.entries(project.targets[target].configurations ?? {}).map(([config, cfg]) => {
+  const entries = Object.entries(project.targets[target].configurations ?? {})
+  return entries.filter(([config]) => !isReport(target, config)).map(([config, cfg]) => {
     const where = `${project.name} ${target} configuration ${config}`
     const m = config.match(CONFIG_NAME)
     if (!m) throw new Error(`${where}: the name must be <platform>-<arch>[-<variant>]`)
@@ -194,6 +200,7 @@ export function select({ graph, affected, targets, labels, gate, configs = [] })
       name: n.name,
       dir: n.data.root,
       ...common,
+      benchmarkReport: Boolean(n.data.targets.benchmark?.configurations?.[REPORT]),
       prebuildStatus: PREBUILD_KEYS.includes(gate[dir]),
       cppStatus: CPP_TEST_KEYS.includes(gate[dir])
     })

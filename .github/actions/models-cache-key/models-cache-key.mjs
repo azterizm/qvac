@@ -6,10 +6,11 @@ import { createHash } from 'node:crypto'
 import { basename, dirname, join, posix } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+// Same selection and destinations as models-download: url entries land in test/model/<name>, warm: false ones are not cached.
 export function entriesFor(manifest, target) {
   return Object.entries(manifest.models || {})
-    .filter(([, m]) => !target || !m.targets || m.targets.includes(target))
-    .map(([name, m]) => ({ name, ...m }))
+    .filter(([, m]) => (!target || !m.targets || m.targets.includes(target)) && m.warm !== false)
+    .map(([name, m]) => ({ name, ...m, dest: m.dest ?? `test/model/${name}` }))
 }
 
 export function resolve({ manifestText, workdir, target, version = 'v1' }) {

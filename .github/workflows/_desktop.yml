@@ -1,7 +1,7 @@
 name: Desktop tests
 
-# Each package's desktop targets (test:integration, test:backend) through Nx, one job per configuration on the runner its
-# configuration names, against the build job's prebuilds for that platform.
+# Each package's desktop targets (test:integration, test:backend, benchmark) through Nx, one job per configuration on the
+# runner its configuration names, against the build job's prebuilds for that platform.
 on:
   workflow_call:
     inputs:
@@ -9,6 +9,18 @@ on:
         description: JSON rows of every desktop target
         type: string
         required: true
+      perf_runs:
+        description: QVAC_PERF_RUNS for the target; empty leaves the package default
+        type: string
+        default: ""
+      perf_warmup_runs:
+        description: QVAC_PERF_WARMUP_RUNS for the target; empty leaves the package default
+        type: string
+        default: ""
+      args:
+        description: BENCHMARK_ARGS, read by a benchmark command
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -122,7 +134,15 @@ jobs:
           PROJECT: ${{ matrix.row.project }}
           TARGET: ${{ matrix.row.target }}
           CONFIG: ${{ matrix.row.config }}
-        run: pnpm exec nx run-many -t "$TARGET" -p "$PROJECT" -c "$CONFIG" --exclude-task-dependencies --outputStyle=stream
+          PERF_RUNS: ${{ inputs.perf_runs }}
+          PERF_WARMUP_RUNS: ${{ inputs.perf_warmup_runs }}
+          ARGS: ${{ inputs.args }}
+        # Exported only when set, so an empty input never overrides a package default.
+        run: |
+          if [ -n "$PERF_RUNS" ]; then export QVAC_PERF_RUNS="$PERF_RUNS"; fi
+          if [ -n "$PERF_WARMUP_RUNS" ]; then export QVAC_PERF_WARMUP_RUNS="$PERF_WARMUP_RUNS"; fi
+          if [ -n "$ARGS" ]; then export BENCHMARK_ARGS="$ARGS"; fi
+          pnpm exec nx run-many -t "$TARGET" -p "$PROJECT" -c "$CONFIG" --exclude-task-dependencies --outputStyle=stream
       # Diagnostic: the addon's DLL imports, for when LoadLibrary misses one.
       - if: failure() && runner.os == 'Windows'
         shell: powershell
@@ -138,3 +158,10 @@ jobs:
           path: ${{ env.WORKDIR }}/test/results/performance-report*.json
           if-no-files-found: ignore
           retention-days: "14"
+      - if: always() && !cancelled() && matrix.row.target == 'benchmark'
+        uses: tetherto/qvac-actions/upload-artifact@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          name: ${{ matrix.row.slug }}-benchmark-${{ matrix.row.config }}
+          path: ${{ env.WORKDIR }}/benchmarks/results/
+          if-no-files-found: warn
+          retention-days: "30"
