@@ -45,7 +45,7 @@ export async function download({
     // A sync copies only what the directory lacks, so it runs every time.
     if (m.s3Prefix) {
       mkdirSync(dest, { recursive: true })
-      syncPrefix(m.s3Prefix, dest)
+      syncPrefix(m.s3Prefix, dest, m.exclude ?? [])
       continue
     }
     if (await matches(dest, m)) continue
@@ -85,7 +85,14 @@ async function main(env) {
     workdir: env.WORKDIR,
     target: env.TARGET,
     fetchObject: (key, file) => aws(['s3', 'cp', `s3://${env.BUCKET}/${key}`, file]),
-    syncPrefix: (prefix, dir) => aws(['s3', 'sync', `s3://${env.BUCKET}/${prefix}`, dir]),
+    syncPrefix: (prefix, dir, exclude) =>
+      aws([
+        's3',
+        'sync',
+        `s3://${env.BUCKET}/${prefix}`,
+        dir,
+        ...exclude.flatMap((g) => ['--exclude', g])
+      ]),
     // Each mirror in turn, with curl's own retries; a pinned sha256 checks whichever answered.
     fetchUrls: (urls, file) => {
       for (const [i, url] of urls.entries()) {

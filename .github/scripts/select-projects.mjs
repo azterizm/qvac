@@ -226,8 +226,14 @@ export function select({ graph, affected, targets, labels, gate, configs = [] })
   // A baseline package runs its C++ tests on every pull request, without the label, so new tests cannot land skipped
   // (QVAC-25289); these rows build and test it alone.
   const baseline = new Set(out.projects.filter((p) => p.cppBaseline).map((p) => p.name))
-  for (const t of ['build', 'cpp:tests'])
-    if (out.matrices[t]) out.matrices[`${t}:baseline`] = out.matrices[t].filter((r) => baseline.has(r.project))
+  if (out.matrices['cpp:tests']) {
+    const tests = out.matrices['cpp:tests'].filter((r) => baseline.has(r.project))
+    out.matrices['cpp:tests:baseline'] = tests
+    // Only the builds those test hosts restore, not the package's every platform.
+    const hosts = new Set(tests.map((r) => `${r.project}@${r.platform}-${r.arch}`))
+    if (out.matrices.build)
+      out.matrices['build:baseline'] = out.matrices.build.filter((r) => hosts.has(`${r.project}@${r.config}`))
+  }
   return out
 }
 

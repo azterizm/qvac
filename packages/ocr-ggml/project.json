@@ -274,6 +274,56 @@
         }
       }
     },
+    "benchmark": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "cwd": "packages/ocr-ggml",
+        "parallel": false,
+        "commands": [
+          {
+            "command": "node ci/benchmark.mjs",
+            "forwardAllArgs": true
+          }
+        ]
+      },
+      "configurations": {
+        "linux-x64": {
+          "args": "--devices cpu --reference",
+          "ci": {
+            "runner": "ubuntu_2404"
+          }
+        },
+        "linux-x64-gpu": {
+          "args": "--devices vulkan",
+          "ci": {
+            "runner": "linux_ubuntu2404_x64_gpu"
+          }
+        },
+        "darwin-arm64": {
+          "args": "--devices cpu,metal",
+          "ci": {
+            "runner": "macos_arm64_gpu"
+          }
+        },
+        "win32-x64": {
+          "args": "--devices cpu,vulkan",
+          "ci": {
+            "runner": "win_2025_x64_gpu"
+          }
+        },
+        "report": {
+          "commands": [
+            "node ci/benchmark-report.mjs"
+          ]
+        }
+      },
+      "metadata": {
+        "timeoutMinutes": 300
+      }
+    },
     "cache:models": {
       "executor": "nx:noop"
     },

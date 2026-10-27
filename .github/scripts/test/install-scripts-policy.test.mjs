@@ -157,7 +157,6 @@ const PENDING = [
     ['.github/workflows/benchmark-asr-ggml.yml', 3],
     ['.github/workflows/benchmark-embed-llamacpp.yml', 2],
     ['.github/workflows/benchmark-llm-llamacpp.yml', 2],
-    ['.github/workflows/benchmark-ocr-ggml.yml', 2],
     ['.github/workflows/benchmark-perf-embed-llamacpp.yml', 2],
     ['.github/workflows/benchmark-perf-llm-llamacpp.yml', 2],
     ['.github/workflows/benchmark-translation-nmtcpp.yml', 2],

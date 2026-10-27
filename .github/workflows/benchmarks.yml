@@ -183,6 +183,7 @@ jobs:
         shell: bash
         env:
           PROJECT: ${{ matrix.project.name }}
+          BENCHMARK_ARGS: ${{ inputs.args }}
         run: pnpm exec nx run-many -t benchmark -p "$PROJECT" -c report --exclude-task-dependencies --outputStyle=stream
       - if: always() && matrix.project.benchmarkReport
         uses: tetherto/qvac-actions/upload-artifact@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges

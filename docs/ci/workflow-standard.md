@@ -77,7 +77,7 @@ Each platform a target runs on is an Nx configuration of that target, named `<pl
 The jobs that run a target fetch its models first, from `test/integration/models.manifest.json` merged with `ci/models.manifest.json`; either file may be absent. Put models only CI stages in the `ci/` one, so a manifest the package's tests own stays as they expect. Each entry names one source:
 
 - `s3Path`: one object, into `dest`.
-- `s3Prefix`: a directory, synced into `dest`.
+- `s3Prefix`: a directory, synced into `dest`, skipping the `exclude` globs.
 - `urls`: pinned mirrors, into `dest`, by default `test/model/<name>`; `sha256` and `bytes` are checked when set.
 
 `targets` lists the targets that need the entry, by default `test:integration` only; `skip` lists `<platform>-<arch>` hosts that never need it; `warm: false` leaves it to the tests.
