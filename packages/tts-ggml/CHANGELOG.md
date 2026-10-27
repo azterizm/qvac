@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   products keep F32 activations.
 - Vulkan: tensor views not aligned for the speech ops fall back instead of
   returning wrong data.
+- `runStream()` and `runStreaming()` stats keep `backendDevice`, `backendId`,
+  `gpuUnsupported` and the LavaSR enhancer / denoiser backend fields from the
+  last chunk that reported them, as they already did for `codecSidecarLoaded`
+  and `codecOnCoreml`, so a chunked Audio8 run reports where it ran.
 
 ## [0.14.0] - 2026-10-23
 
