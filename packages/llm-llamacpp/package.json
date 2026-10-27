@@ -145,7 +145,8 @@
     },
     "./addonLogging.js": "./addonLogging.js",
     "./addon.js": "./addon.js",
-    "./binding.js": "./binding.js"
+    "./binding.js": "./binding.js",
+    "./prebuilds/web/*": "./prebuilds/web/*"
   },
   "browser": {
     "./binding.js": "./binding.browser.js",
