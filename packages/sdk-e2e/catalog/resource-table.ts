@@ -14,6 +14,20 @@ export const RESOURCE_TABLE: ResourceTable = {
     config: { verbosity: 0, ctx_size: 512 }
   },
 
+  // Keeps its multi-token-prediction layers, for speculative decoding.
+  'llm-mtp': {
+    constant: { $const: 'QWEN3_5_0_8B_MTP_Q4_K_M' },
+    type: 'llamacpp-completion',
+    config: { verbosity: 0, ctx_size: 2048 }
+  },
+
+  // The same model without its MTP layers, drafted for by `llm-mtp`'s head.
+  'llm-no-mtp': {
+    constant: { $const: 'QWEN3_5_0_8B_MULTIMODAL_Q4_K_M' },
+    type: 'llamacpp-completion',
+    config: { verbosity: 0, ctx_size: 2048 }
+  },
+
   'llm-batch': {
     constant: { $const: 'LLAMA_3_2_1B_INST_Q4_0' },
     type: 'llm',
@@ -55,6 +69,13 @@ export const RESOURCE_TABLE: ResourceTable = {
   embeddings: {
     constant: { $const: 'GTE_LARGE_FP16' },
     type: 'llamacpp-embedding'
+  },
+
+  // The reranker the addon's own tests use, pinned until a reranker is in the registry.
+  rerank: {
+    modelSrc:
+      'https://huggingface.co/ggml-org/models/resolve/499bc8821c6b12b4e53c5bffcb21ec206f212d81/jina-reranker-v1-tiny-en/ggml-model-f16.gguf',
+    type: 'llamacpp-rerank'
   },
 
   whisper: {
@@ -571,6 +592,22 @@ export const RESOURCE_TABLE: ResourceTable = {
       threads: 4,
       prediction: 'v',
       params_backend: 'vae=cpu',
+      upscaler: {
+        type: 'esrgan',
+        model_src: { $const: 'REALESRGAN_X4PLUS_ANIME_6B' },
+        tile_size: 128
+      }
+    }
+  },
+
+  'diffusion-esrgan-fit-probe': {
+    on: ['desktop'],
+    constant: { $const: 'SD_V2_1_1B_Q8_0' },
+    type: 'sdcpp-generation',
+    config: {
+      device: 'gpu',
+      threads: 4,
+      prediction: 'v',
       upscaler: {
         type: 'esrgan',
         model_src: { $const: 'REALESRGAN_X4PLUS_ANIME_6B' },

@@ -62,6 +62,7 @@ class AssessModelFitRequestModelsItemModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -168,6 +169,7 @@ class AssessModelFitRequestModelsItemModelType(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -2222,7 +2224,7 @@ class BatchCompletionStreamRequestPromptsItemGenerationParams(GeneratedBaseModel
     parallel_tool_calls: Annotated[
         bool | None,
         Field(
-            description="Whether one response may carry more than one tool call. `true` lets the chat template and tool-call grammar accept several; unset or `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
+            description="Whether one response may carry more than one tool call. `true` (default) lets the chat template and tool-call grammar accept several; `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
         ),
     ] = None
 
@@ -2644,6 +2646,10 @@ class BatchCompletionStreamResponseEventsItemEventCompletionStatsStats(
     tool_definitions_dropped: Annotated[
         float | None, Field(alias="toolDefinitionsDropped")
     ] = None
+    draft_tokens: Annotated[float | None, Field(alias="draftTokens")] = None
+    draft_accepted_tokens: Annotated[
+        float | None, Field(alias="draftAcceptedTokens")
+    ] = None
     backend_device: Annotated[
         BatchCompletionStreamResponseEventsItemEventCompletionStatsStatsBackendDevice
         | None,
@@ -2778,6 +2784,10 @@ class BatchCompletionStreamResponseStats(GeneratedBaseModel):
     avg_concurrent_seq: Annotated[float | None, Field(alias="avgConcurrentSeq")] = None
     tool_definitions_dropped: Annotated[
         float | None, Field(alias="toolDefinitionsDropped")
+    ] = None
+    draft_tokens: Annotated[float | None, Field(alias="draftTokens")] = None
+    draft_accepted_tokens: Annotated[
+        float | None, Field(alias="draftAcceptedTokens")
     ] = None
     backend_device: Annotated[
         BatchCompletionStreamResponseStatsBackendDevice | None,
@@ -3402,6 +3412,7 @@ class CancelRequestBroadKind(Enum):
     batch_completion = "batchCompletion"
     embeddings = "embeddings"
     decision = "decision"
+    rerank = "rerank"
     transcribe = "transcribe"
     translate = "translate"
     diffusion = "diffusion"
@@ -3705,7 +3716,7 @@ class CompletionOrchestrateRequestGenerationParams(GeneratedBaseModel):
     parallel_tool_calls: Annotated[
         bool | None,
         Field(
-            description="Whether one response may carry more than one tool call. `true` lets the chat template and tool-call grammar accept several; unset or `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
+            description="Whether one response may carry more than one tool call. `true` (default) lets the chat template and tool-call grammar accept several; `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
         ),
     ] = None
 
@@ -3989,6 +4000,10 @@ class CompletionOrchestrateResponseEventsItemCompletionStatsStats(GeneratedBaseM
     avg_concurrent_seq: Annotated[float | None, Field(alias="avgConcurrentSeq")] = None
     tool_definitions_dropped: Annotated[
         float | None, Field(alias="toolDefinitionsDropped")
+    ] = None
+    draft_tokens: Annotated[float | None, Field(alias="draftTokens")] = None
+    draft_accepted_tokens: Annotated[
+        float | None, Field(alias="draftAcceptedTokens")
     ] = None
     backend_device: Annotated[
         CompletionOrchestrateResponseEventsItemCompletionStatsStatsBackendDevice | None,
@@ -4353,7 +4368,7 @@ class CompletionStreamRequestGenerationParams(GeneratedBaseModel):
     parallel_tool_calls: Annotated[
         bool | None,
         Field(
-            description="Whether one response may carry more than one tool call. `true` lets the chat template and tool-call grammar accept several; unset or `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
+            description="Whether one response may carry more than one tool call. `true` (default) lets the chat template and tool-call grammar accept several; `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
         ),
     ] = None
 
@@ -4627,6 +4642,10 @@ class CompletionStreamResponseEventsItemCompletionStatsStats(GeneratedBaseModel)
     tool_definitions_dropped: Annotated[
         float | None, Field(alias="toolDefinitionsDropped")
     ] = None
+    draft_tokens: Annotated[float | None, Field(alias="draftTokens")] = None
+    draft_accepted_tokens: Annotated[
+        float | None, Field(alias="draftAcceptedTokens")
+    ] = None
     backend_device: Annotated[
         CompletionStreamResponseEventsItemCompletionStatsStatsBackendDevice | None,
         Field(
@@ -4773,6 +4792,7 @@ class ModelType(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -4789,6 +4809,7 @@ class PluginId(Enum):
     llm = "@qvac/sdk/llamacpp-completion/plugin"
     embedding = "@qvac/sdk/llamacpp-embedding/plugin"
     decision = "@qvac/sdk/llamacpp-decision/plugin"
+    rerank = "@qvac/sdk/llamacpp-rerank/plugin"
     whisper = "@qvac/sdk/whispercpp-transcription/plugin"
     bci = "@qvac/sdk/bci-whispercpp-transcription/plugin"
     moss_transcribe = "@qvac/sdk/moss-transcribe/plugin"
@@ -5889,7 +5910,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     width: Annotated[
         int | None,
         Field(
-            description="Image width in pixels (must be a multiple of 8).",
+            description="Image width in pixels. Multiple of 8; Qwen-Image-2.1 requires a multiple of 32.",
             gt=0,
             le=9007199254740991,
             multiple_of=8,
@@ -5898,7 +5919,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     height: Annotated[
         int | None,
         Field(
-            description="Image height in pixels (must be a multiple of 8).",
+            description="Image height in pixels. Multiple of 8; Qwen-Image-2.1 requires a multiple of 32.",
             gt=0,
             le=9007199254740991,
             multiple_of=8,
@@ -5913,7 +5934,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     cfg_scale: Annotated[
         float | None,
         Field(
-            description="Classifier-free guidance scale for SD 1.x / 2.x / XL / SD3 models; typical range 1–20, default 7"
+            description="Classifier-free guidance scale for SD and Qwen-Image models; typical range 1-20, default 7"
         ),
     ] = None
     img_cfg_scale: Annotated[
@@ -5971,7 +5992,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     init_image: Annotated[
         str | None,
         Field(
-            description="Base64-encoded image for img2img generation. Mutually exclusive with init_images.",
+            description="Base64-encoded PNG/JPEG for img2img or reference editing. Qwen-Image-2.1 requires projectionModelSrc for editing and preserves reference alpha. Mutually exclusive with init_images.",
             min_length=1,
             pattern="^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
         ),
@@ -5979,7 +6000,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     init_images: Annotated[
         list[InitImage] | None,
         Field(
-            description="FLUX.2-only multi-reference fusion: array of base64-encoded PNG/JPEG buffers. Each buffer becomes a separate reference image that the FLUX.2 transformer attends to. Mutually exclusive with init_image; requires the model to be loaded with config.prediction='flux2_flow' and a Qwen3 text encoder via llmModelSrc.",
+            description="Ordered base64-encoded PNG/JPEG references for models with reference editing, including FLUX.2 and Qwen-Image-2.1. Native model detection validates support. Qwen-Image-2.1 requires projectionModelSrc, preserves alpha, and does not need FLUX @imageN tags or a prediction override. Mutually exclusive with init_image.",
             min_length=1,
         ),
     ] = None
@@ -6006,7 +6027,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     strength: Annotated[
         float | None,
         Field(
-            description="img2img denoising strength (0.0 = keep source, 1.0 = ignore source); used by the SD/SDXL SDEdit path. No-op for FLUX.2, which uses in-context conditioning and ignores this field.",
+            description="img2img denoising strength for SD/SDXL SDEdit. Does not control reference-editing strength for FLUX.2 or Qwen-Image-2.1; these models start the target from noise.",
             ge=0.0,
             le=1.0,
         ),
@@ -6014,7 +6035,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     upscale: Annotated[
         bool | DiffusionStreamRequestUpscale | None,
         Field(
-            description="Post-generation ESRGAN upscale. `true` (or `{}` / `{ repeats: 1 }`) runs a single upscale pass at the model's native scale factor (e.g. x4 for RealESRGAN_x4plus). `false` is a no-op (same as omitting the field). `{ repeats: N }` runs the upscaler N times sequentially — each pass multiplies the output dimensions by the model's scale factor. When `batch_count > 1`, every output image is upscaled independently. Requires the model to be loaded with `upscaler.model_src` set in modelConfig."
+            description="Post-generation ESRGAN upscale. `true` (or `{}` / `{ repeats: 1 }`) runs a single upscale pass at the model's native scale factor (e.g. x4 for RealESRGAN_x4plus). `false` is a no-op (same as omitting the field). `{ repeats: N }` runs the upscaler N times sequentially — each pass multiplies the output dimensions by the model's scale factor. When `batch_count > 1`, every output image is upscaled independently. Requires the model to be loaded with `upscaler.model_src` set in modelConfig. ESRGAN accepts RGB only; Qwen-Image-2.1 RGBA output rejects upscaling."
         ),
     ] = None
     type: Literal["diffusionStream"] = "diffusionStream"
@@ -10578,12 +10599,19 @@ class FitTarget1(RootModel[str]):
     ]
 
 
+class LoadModelSrcRequestLlamacppCompletionModelConfigSpecType(Enum):
+    none = "none"
+    draft_mtp = "draft-mtp"
+    draft_dflash = "draft-dflash"
+
+
 class LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrcAddon(Enum):
     llamacpp_completion = "llamacpp-completion"
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -10680,6 +10708,115 @@ class LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrc(
     ] = None
     addon: Annotated[
         LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrcAddon
+        | Literal["vad"]
+        | None,
+        Field(
+            description="Inference addon / capability category this model belongs to."
+        ),
+    ] = None
+
+
+class LoadModelSrcRequestLlamacppCompletionModelConfigDraftModelSrcAddon(Enum):
+    llamacpp_completion = "llamacpp-completion"
+    whispercpp_transcription = "whispercpp-transcription"
+    bci_whispercpp_transcription = "bci-whispercpp-transcription"
+    llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
+    nmtcpp_translation = "nmtcpp-translation"
+    onnx_tts = "onnx-tts"
+    tts_ggml = "tts-ggml"
+    parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
+    ggml_ocr = "ggml-ocr"
+    sdcpp_generation = "sdcpp-generation"
+    audiogen_ggml = "audiogen-ggml"
+    ggml_vla = "ggml-vla"
+    ggml_classification = "ggml-classification"
+    llm = "llm"
+    whisper = "whisper"
+    bci = "bci"
+    embeddings = "embeddings"
+    nmt = "nmt"
+    parakeet = "parakeet"
+    tts = "tts"
+    ocr = "ocr"
+    diffusion = "diffusion"
+    audiogen = "audiogen"
+    vla = "vla"
+    classification = "classification"
+
+
+class LoadModelSrcRequestLlamacppCompletionModelConfigDraftModelSrc(GeneratedBaseModel):
+    src: Annotated[
+        str,
+        Field(
+            description="Location of the model file: a local file path, an HTTP(S) URL, or a `registry://` / `pear://` URI."
+        ),
+    ]
+    name: Annotated[
+        str | None,
+        Field(
+            description="Display name for this model instance; overrides the name derived from the source."
+        ),
+    ] = None
+    model_id: Annotated[
+        str | None,
+        Field(
+            alias="modelId",
+            description="Unique identifier used to reference the model in QVAC calls.",
+        ),
+    ] = None
+    registry_path: Annotated[
+        str | None,
+        Field(
+            alias="registryPath",
+            description="Registry-relative path to the model (set for registry-backed models).",
+        ),
+    ] = None
+    registry_source: Annotated[
+        str | None,
+        Field(
+            alias="registrySource",
+            description="Registry source identifier, e.g. `huggingface`.",
+        ),
+    ] = None
+    blob_core_key: Annotated[
+        str | None,
+        Field(
+            alias="blobCoreKey",
+            description="Hyperdrive blob core key for the model file.",
+        ),
+    ] = None
+    blob_index: Annotated[
+        float | None,
+        Field(
+            alias="blobIndex",
+            description="Internal: index of this shard within its Hyperdrive blob core, for sharded models.",
+        ),
+    ] = None
+    engine: Annotated[
+        str | None,
+        Field(
+            description="Canonical inference engine identifier, e.g. `llamacpp-completion`."
+        ),
+    ] = None
+    expected_size: Annotated[
+        float | None,
+        Field(
+            alias="expectedSize",
+            description="Expected total size of the model file in bytes.",
+        ),
+    ] = None
+    sha256_checksum: Annotated[
+        str | None,
+        Field(
+            alias="sha256Checksum",
+            description="Expected SHA-256 checksum of the model file.",
+        ),
+    ] = None
+    addon: Annotated[
+        LoadModelSrcRequestLlamacppCompletionModelConfigDraftModelSrcAddon
         | Literal["vad"]
         | None,
         Field(
@@ -11107,11 +11244,49 @@ class LoadModelSrcRequestLlamacppCompletionModelConfig(GeneratedBaseModel):
             le=2147483647,
         ),
     ] = None
+    spec_type: Annotated[
+        LoadModelSrcRequestLlamacppCompletionModelConfigSpecType | None,
+        Field(
+            description="Speculative decoding, as llama-server's `--spec-type`. `'draft-mtp'` drafts with the model's own multi-token-prediction head, or with an external MTP head given as `draftModelSrc`; the head, when given, otherwise the model, must ship MTP layers, and a head must match the model, or the load fails. `'draft-dflash'` drafts with the DFlash model given as `draftModelSrc`, which it requires. The model verifies every draft, so output keeps the distribution of plain decoding. `'none'` (default) decodes one token per step. Works with multimodal prompts, `parallel` and `kvCache`. Completion stats then report `draftTokens` and `draftAcceptedTokens`.",
+            title="LoadModelSrcRequestLlamacppCompletionModelConfigSpecType",
+        ),
+    ] = None
+    spec_draft_n_max: Annotated[
+        int | None,
+        Field(
+            description="Longest draft per step (1–64, default 3). Lowered at load, with a warning, to fit one `ubatch-size` and each sequence’s share of `batch-size`. Requires `spec_type` `'draft-mtp'` or `'draft-dflash'`.",
+            ge=1,
+            le=64,
+        ),
+    ] = None
+    spec_draft_n_min: Annotated[
+        int | None,
+        Field(
+            description="Shortest draft worth verifying (0–64, default 0, at most `spec_draft_n_max`); shorter drafts are dropped. Requires `spec_type` `'draft-mtp'` or `'draft-dflash'`.",
+            ge=0,
+            le=64,
+        ),
+    ] = None
+    spec_draft_p_min: Annotated[
+        float | None,
+        Field(
+            description="Minimum draft-head probability for a token to extend the draft (0–1, default 0). Requires `spec_type` `'draft-mtp'` or `'draft-dflash'`.",
+            ge=0.0,
+            le=1.0,
+        ),
+    ] = None
     projection_model_src: Annotated[
         str | LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrc | None,
         Field(
             alias="projectionModelSrc",
             description="Multimodal projection (mmproj / vision encoder) model source; multimodal models only.",
+        ),
+    ] = None
+    draft_model_src: Annotated[
+        str | LoadModelSrcRequestLlamacppCompletionModelConfigDraftModelSrc | None,
+        Field(
+            alias="draftModelSrc",
+            description="Draft model source, as llama-server's `--spec-draft-model`: the DFlash model, required by `spec_type: 'draft-dflash'`, or an external MTP head for `spec_type: 'draft-mtp'`, such as the MTP quantization of the same model or a Gemma 4 assistant for its Gemma 4 model. Placed like the model (`device`, `gpu_layers`). Model fit checks count an MTP head's memory but not a DFlash model's or a Gemma 4 assistant's, so leave room for those.",
         ),
     ] = None
     image_tile_mode: Annotated[
@@ -11292,6 +11467,7 @@ class LoadModelSrcRequestWhispercppTranscriptionModelConfigVadModelSrcAddon(Enum
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -11871,6 +12047,7 @@ class LoadModelSrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrcAd
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -12920,6 +13097,212 @@ class LoadModelSrcRequestLlamacppDecision(GeneratedBaseModel):
     ] = None
 
 
+class LoadModelSrcRequestLlamacppRerankModelFitPolicy(Enum):
+    log = "log"
+    refuse = "refuse"
+    off = "off"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfigDevice(Enum):
+    cpu = "cpu"
+    gpu = "gpu"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfigBackendItem(Enum):
+    cuda = "cuda"
+    vulkan = "vulkan"
+    metal = "metal"
+    opencl = "opencl"
+    auto = "auto"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfigFlashAttn(Enum):
+    on = "on"
+    off = "off"
+    auto = "auto"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfigMainGpu(Enum):
+    integrated = "integrated"
+    dedicated = "dedicated"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfigSplitMode(Enum):
+    none = "none"
+    layer = "layer"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfig(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    device: Annotated[
+        LoadModelSrcRequestLlamacppRerankModelConfigDevice | None,
+        Field(
+            description="Compute device. Default 'gpu'.",
+            title="LoadModelSrcRequestLlamacppRerankModelConfigDevice",
+        ),
+    ] = None
+    gpu_layers: Annotated[
+        int | None,
+        Field(
+            description="Layers to offload. Unset lets the addon choose placement.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
+    batch_size: Annotated[
+        int | None,
+        Field(
+            description="Tokens per forward pass. Default 2048; each document paired with the query must fit.",
+            gt=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    backend: Annotated[
+        list[LoadModelSrcRequestLlamacppRerankModelConfigBackendItem] | None,
+        Field(
+            description="Ordered GPU backend names, such as ['cuda', 'vulkan']. Accepted names: cuda, vulkan, metal, opencl, and auto for no preference. If unset, uses the native default order. If none of the specified names has a corresponding available device, selection falls back to the native default order. Use device: 'cpu' for CPU. A GPU override cannot be combined with 'split-mode': 'layer'.",
+            min_length=1,
+        ),
+    ] = None
+    poll: Annotated[
+        int | None,
+        Field(
+            description="CPU polling level, from 0 to 100. If omitted, uses the default native behavior. Higher values may reduce wake latency but consume more CPU during GPU work.",
+            ge=0,
+            le=100,
+        ),
+    ] = None
+    poll_batch: Annotated[
+        int | None,
+        Field(
+            alias="pollBatch",
+            description="CPU polling level for batch processing, from 0 to 100. If omitted, uses the default native behavior.",
+            ge=0,
+            le=100,
+        ),
+    ] = None
+    threads: Annotated[
+        int | None,
+        Field(
+            description="CPU threads, at most the CPU count. Zero or below uses all logical CPUs.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
+    threads_batch: Annotated[
+        int | None,
+        Field(
+            alias="threads-batch",
+            description="Batch CPU threads. Unset uses threads; zero or below uses all logical CPUs.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
+    flash_attn: Annotated[
+        LoadModelSrcRequestLlamacppRerankModelConfigFlashAttn | None,
+        Field(
+            description="Flash attention mode. Default auto.",
+            title="LoadModelSrcRequestLlamacppRerankModelConfigFlashAttn",
+        ),
+    ] = None
+    verbosity: Annotated[
+        int | None,
+        Field(
+            description="Native log level: 0 error, 1 warn, 2 info, 3 debug.",
+            ge=0,
+            le=3,
+        ),
+    ] = None
+    main_gpu: Annotated[
+        MainGpu2 | LoadModelSrcRequestLlamacppRerankModelConfigMainGpu | None,
+        Field(alias="main-gpu", description="GPU index or device class."),
+    ] = None
+    split_mode: Annotated[
+        LoadModelSrcRequestLlamacppRerankModelConfigSplitMode | None,
+        Field(
+            alias="split-mode",
+            description="Multi-GPU split mode.",
+            title="LoadModelSrcRequestLlamacppRerankModelConfigSplitMode",
+        ),
+    ] = None
+    tensor_split: Annotated[
+        str | None,
+        Field(alias="tensor-split", description="Per-GPU tensor split proportions."),
+    ] = None
+    opencl_cache_dir: Annotated[
+        str | None,
+        Field(
+            alias="openclCacheDir",
+            description="Writable OpenCL kernel cache directory, required on Android.",
+        ),
+    ] = None
+
+
+class LoadModelSrcRequestLlamacppRerank(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["loadModel"] = "loadModel"
+    model_src: Annotated[
+        str,
+        Field(
+            alias="modelSrc",
+            description="The model to load: a registry model constant for a built-in model, or a model source — a local file path, an HTTP(S) URL, or a `registry://` / `pear://` URI — for HTTP, local, or P2P models.",
+        ),
+    ]
+    model_name: Annotated[str | None, Field(alias="modelName")] = None
+    with_progress: Annotated[bool | None, Field(alias="withProgress")] = None
+    seed: bool | None = None
+    fallback_src: Annotated[
+        str | None,
+        Field(
+            alias="fallbackSrc",
+            description="Alternate source — an HTTP URL or local file path — used to load a built-in registry model when it cannot be downloaded from the registry. The bytes are validated against the model checksum before use.",
+        ),
+    ] = None
+    require_http_checksum: Annotated[
+        bool | None,
+        Field(
+            alias="requireHttpChecksum",
+            description="Reject a Hugging Face HTTP download that exposes no usable SHA-256 instead of downloading it unverified. Overrides the engine config for this call; defaults to the config value (false).",
+        ),
+    ] = None
+    require_secure_transport: Annotated[
+        bool | None,
+        Field(
+            alias="requireSecureTransport",
+            description="Reject plaintext http:// and HTTPS→HTTP downgrades for every HTTP source on this call (loopback exempt); when unset, only Hugging Face transport is hardened. Overrides the engine config for this call; defaults to the config value (false).",
+        ),
+    ] = None
+    model_fit_policy: Annotated[
+        LoadModelSrcRequestLlamacppRerankModelFitPolicy | None,
+        Field(
+            alias="modelFitPolicy",
+            description="What the engine fitter's verdict does to this load: `log` reports it and loads anyway, `refuse` rejects a load the fitter projects will not fit, `off` skips the check. Overrides the engine config for this call; defaults to the config value (`log`).",
+            title="LoadModelSrcRequestLlamacppRerankModelFitPolicy",
+        ),
+    ] = None
+    request_id: Annotated[
+        str | None,
+        Field(
+            alias="requestId",
+            description="Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.",
+            min_length=1,
+        ),
+    ] = None
+    model_type: Annotated[Literal["llamacpp-rerank"], Field(alias="modelType")] = (
+        "llamacpp-rerank"
+    )
+    model_config_: Annotated[
+        LoadModelSrcRequestLlamacppRerankModelConfig | None,
+        Field(
+            alias="modelConfig", title="LoadModelSrcRequestLlamacppRerankModelConfig"
+        ),
+    ] = None
+
+
 class LoadModelSrcRequestNmtcppTranslationModelFitPolicy(Enum):
     log = "log"
     refuse = "refuse"
@@ -13050,6 +13433,7 @@ class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrcAddon(En
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -13160,6 +13544,7 @@ class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrcAddon(En
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -13276,6 +13661,7 @@ class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSrcA
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -13388,6 +13774,7 @@ class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVocabS
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -13500,6 +13887,7 @@ class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVocabS
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -13999,6 +14387,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxS3genModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -14107,6 +14496,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrcAddon(Enum
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -14217,6 +14607,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxMecabDictSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -14325,6 +14716,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxCangjieTsvSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -14433,6 +14825,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrEnhancerModelSrcAddon
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -14543,6 +14936,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrDenoiserModelSrcAddon
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -14910,6 +15304,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrEnhancerModelSrcAddon
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -15020,6 +15415,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrDenoiserModelSrcAddon
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -15316,6 +15712,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigParlerLavasrEnhancerModelSrcAddon(Enu
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -15426,6 +15823,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigParlerLavasrDenoiserModelSrcAddon(Enu
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -15817,6 +16215,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3LavasrEnhancerModelSrcAddon
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -15927,6 +16326,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3LavasrDenoiserModelSrcAddon
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -16037,6 +16437,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3ReferenceAudioSrcAddon(Enum
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -16147,6 +16548,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3Cosyvoice3S3tokModelSrcAddo
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -16259,6 +16661,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3Cosyvoice3CampplusModelSrcA
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -16525,6 +16928,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigAudio8Audio8CodecDecoderModelSrcAddon
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -16635,6 +17039,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigAudio8Audio8CodecEncoderModelSrcAddon
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -16745,6 +17150,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigAudio8ReferenceAudioSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -16979,6 +17385,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigMossMossCodecDecoderModelSrcAddon(Enu
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -17089,6 +17496,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigMossMossCodecEncoderModelSrcAddon(Enu
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -17199,6 +17607,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigMossReferenceAudioSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -17307,6 +17716,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigMossDialogueReferenceSrcsItemAddon(En
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -17613,6 +18023,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigMossSpeechMossSpeechCodecModelSrcAddo
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -17881,6 +18292,7 @@ class LoadModelSrcRequestGgmlOcrModelConfigDetectorModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -18156,7 +18568,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigDevice(Enum):
     cpu = "cpu"
 
 
-class MainGpu3(RootModel[int]):
+class MainGpu4(RootModel[int]):
     root: Annotated[
         int,
         Field(
@@ -18222,6 +18634,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigClipLModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -18330,6 +18743,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigClipGModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -18438,6 +18852,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigT5XxlModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -18546,6 +18961,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigLlmModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -18648,12 +19064,124 @@ class LoadModelSrcRequestSdcppGenerationModelConfigLlmModelSrc(GeneratedBaseMode
     ] = None
 
 
+class LoadModelSrcRequestSdcppGenerationModelConfigProjectionModelSrcAddon(Enum):
+    llamacpp_completion = "llamacpp-completion"
+    whispercpp_transcription = "whispercpp-transcription"
+    bci_whispercpp_transcription = "bci-whispercpp-transcription"
+    llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
+    nmtcpp_translation = "nmtcpp-translation"
+    onnx_tts = "onnx-tts"
+    tts_ggml = "tts-ggml"
+    parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
+    ggml_ocr = "ggml-ocr"
+    sdcpp_generation = "sdcpp-generation"
+    audiogen_ggml = "audiogen-ggml"
+    ggml_vla = "ggml-vla"
+    ggml_classification = "ggml-classification"
+    llm = "llm"
+    whisper = "whisper"
+    bci = "bci"
+    embeddings = "embeddings"
+    nmt = "nmt"
+    parakeet = "parakeet"
+    tts = "tts"
+    ocr = "ocr"
+    diffusion = "diffusion"
+    audiogen = "audiogen"
+    vla = "vla"
+    classification = "classification"
+
+
+class LoadModelSrcRequestSdcppGenerationModelConfigProjectionModelSrc(
+    GeneratedBaseModel
+):
+    src: Annotated[
+        str,
+        Field(
+            description="Location of the model file: a local file path, an HTTP(S) URL, or a `registry://` / `pear://` URI."
+        ),
+    ]
+    name: Annotated[
+        str | None,
+        Field(
+            description="Display name for this model instance; overrides the name derived from the source."
+        ),
+    ] = None
+    model_id: Annotated[
+        str | None,
+        Field(
+            alias="modelId",
+            description="Unique identifier used to reference the model in QVAC calls.",
+        ),
+    ] = None
+    registry_path: Annotated[
+        str | None,
+        Field(
+            alias="registryPath",
+            description="Registry-relative path to the model (set for registry-backed models).",
+        ),
+    ] = None
+    registry_source: Annotated[
+        str | None,
+        Field(
+            alias="registrySource",
+            description="Registry source identifier, e.g. `huggingface`.",
+        ),
+    ] = None
+    blob_core_key: Annotated[
+        str | None,
+        Field(
+            alias="blobCoreKey",
+            description="Hyperdrive blob core key for the model file.",
+        ),
+    ] = None
+    blob_index: Annotated[
+        float | None,
+        Field(
+            alias="blobIndex",
+            description="Internal: index of this shard within its Hyperdrive blob core, for sharded models.",
+        ),
+    ] = None
+    engine: Annotated[
+        str | None,
+        Field(
+            description="Canonical inference engine identifier, e.g. `llamacpp-completion`."
+        ),
+    ] = None
+    expected_size: Annotated[
+        float | None,
+        Field(
+            alias="expectedSize",
+            description="Expected total size of the model file in bytes.",
+        ),
+    ] = None
+    sha256_checksum: Annotated[
+        str | None,
+        Field(
+            alias="sha256Checksum",
+            description="Expected SHA-256 checksum of the model file.",
+        ),
+    ] = None
+    addon: Annotated[
+        LoadModelSrcRequestSdcppGenerationModelConfigProjectionModelSrcAddon
+        | Literal["vad"]
+        | None,
+        Field(
+            description="Inference addon / capability category this model belongs to."
+        ),
+    ] = None
+
+
 class LoadModelSrcRequestSdcppGenerationModelConfigVaeModelSrcAddon(Enum):
     llamacpp_completion = "llamacpp-completion"
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -18764,6 +19292,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrcAdd
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -18874,6 +19403,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigUncondModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -18982,6 +19512,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigClipVisionModelSrcAddon(Enum)
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -19092,6 +19623,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigAudioVaeModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -19202,6 +19734,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigEmbeddingsConnectorsModelSrcA
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -19312,6 +19845,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigTaehvModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -19420,6 +19954,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigSceneSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -19548,6 +20083,15 @@ class LoadModelSrcRequestSdcppGenerationModelConfigWorld(GeneratedBaseModel):
         int | None,
         Field(description="Walk RNG seed.", ge=-9007199254740991, le=9007199254740991),
     ] = None
+    fit_steps: Annotated[
+        int | None,
+        Field(
+            alias="fitSteps",
+            description="Walk steps covered by memory fit. Defaults to 100; does not limit generation or retained history.",
+            ge=1,
+            le=1000000,
+        ),
+    ] = None
     threads: Annotated[
         Literal[-1] | Threads | None,
         Field(description="CPU threads for the session. -1 = auto-detect (default)."),
@@ -19639,6 +20183,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigUpscalerModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -19806,7 +20351,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfig(GeneratedBaseModel):
     mode: Annotated[
         LoadModelSrcRequestSdcppGenerationModelConfigMode | None,
         Field(
-            description="Operation mode for the diffusion plugin. `'diffusion'` (default) builds a full SD / SDXL / SD3 / FLUX pipeline from the primary model plus optional auxiliary text encoders, VAE, unconditional diffusion model, and ESRGAN upscaler, and exposes diffusion({ ... }). `'upscale'` builds a standalone ESRGAN upscaler from the primary model file alone (auxiliary model sources are ignored) and exposes upscale({ ... }). `'video'` builds a `VideoStableDiffusion` pipeline and exposes video({ ... }). The video layout is selected from the auxiliary sources: supplying `embeddingsConnectorsModelSrc` loads the LTX-2 layout (Gemma text encoder via `llmModelSrc` + video VAE + connectors, optional `audioVaeModelSrc` for synchronized audio). Without connectors, `llmModelSrc` + `vaeModelSrc` selects MiniMax-H3 text/image-to-video (optional `audioVaeModelSrc` for synchronized audio); otherwise the Wan layout is used (UMT5 text encoder via `t5XxlModelSrc` + VAE). On React Native, loading the video model on-device will likely fail because the video diffusion models currently shipped by QVAC are too large to load on typical mobile devices. `'world'` builds an ABot-World interactive world session and exposes worldCreateScene({ ... }) and worldStep({ ... }). It requires `taehvModelSrc`, plus `t5XxlModelSrc` + `vaeModelSrc` to create scenes and/or `sceneSrc` to walk a pre-built one. World sessions run only on the machine hosting the worker and need a dedicated GPU. At 832x480, the default walk with resident weights needs at least 20 GB free VRAM. `world.paramsBackend`, `world.maxVram`, and `world.streamLayers` can reduce that requirement.",
+            description="Operation mode for the diffusion plugin. `'diffusion'` (default) builds a full SD / SDXL / SD3 / FLUX / Qwen-Image pipeline from the primary model plus optional auxiliary text encoders, VAE, unconditional diffusion model, and ESRGAN upscaler, and exposes diffusion({ ... }). `'upscale'` builds a standalone ESRGAN upscaler from the primary model file alone (auxiliary model sources are ignored) and exposes upscale({ ... }). `'video'` builds a `VideoStableDiffusion` pipeline and exposes video({ ... }). The video layout is selected from the auxiliary sources: supplying `embeddingsConnectorsModelSrc` loads the LTX-2 layout (Gemma text encoder via `llmModelSrc` + video VAE + connectors, optional `audioVaeModelSrc` for synchronized audio). Without connectors, `llmModelSrc` + `vaeModelSrc` selects MiniMax-H3 text/image-to-video (optional `audioVaeModelSrc` for synchronized audio); otherwise the Wan layout is used (UMT5 text encoder via `t5XxlModelSrc` + VAE). On React Native, loading the video model on-device will likely fail because the video diffusion models currently shipped by QVAC are too large to load on typical mobile devices. `'world'` builds an ABot-World interactive world session and exposes worldCreateScene({ ... }) and worldStep({ ... }). It requires `taehvModelSrc`, plus `t5XxlModelSrc` + `vaeModelSrc` to create scenes and/or `sceneSrc` to walk a pre-built one. World sessions run only on the machine hosting the worker and need a dedicated GPU. At 832x480, the default walk with resident weights needs at least 20 GB free VRAM. `world.paramsBackend`, `world.maxVram`, and `world.streamLayers` can reduce that requirement.",
             title="LoadModelSrcRequestSdcppGenerationModelConfigMode",
         ),
     ] = "diffusion"
@@ -19822,7 +20367,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfig(GeneratedBaseModel):
         ),
     ] = None
     main_gpu: Annotated[
-        MainGpu3 | LoadModelSrcRequestSdcppGenerationModelConfigMainGpu | None,
+        MainGpu4 | LoadModelSrcRequestSdcppGenerationModelConfigMainGpu | None,
         Field(
             alias="main-gpu",
             description='GPU to pin when `device` is "gpu": a GPU-device index, "integrated", or "dedicated" (the discrete GPU with the most VRAM). Omit to let the backend choose the first enumerated device. Resolved against the addon\'s own ggml device enumeration, so it cannot desync from the device list the backend actually uses. If an explicit request cannot be satisfied (e.g. "integrated" with no integrated GPU, "dedicated" with no discrete GPU, or an out-of-range index) the addon falls back to CPU rather than substituting a different GPU. Stripped on mobile (single-GPU devices).',
@@ -19951,14 +20496,21 @@ class LoadModelSrcRequestSdcppGenerationModelConfig(GeneratedBaseModel):
         str | LoadModelSrcRequestSdcppGenerationModelConfigLlmModelSrc | None,
         Field(
             alias="llmModelSrc",
-            description="LLM text encoder model — required for FLUX.2 [klein] (Qwen3), Ideogram 4 (Qwen3-VL), LTX-2 video (Gemma), and MiniMax-H3 (H3-specific Qwen3-VL).",
+            description="LLM text encoder model — required for FLUX.2 [klein] (Qwen3), Qwen-Image-2.1 and Ideogram 4 (Qwen3-VL), LTX-2 video (Gemma), and MiniMax-H3 (H3-specific Qwen3-VL).",
+        ),
+    ] = None
+    projection_model_src: Annotated[
+        str | LoadModelSrcRequestSdcppGenerationModelConfigProjectionModelSrc | None,
+        Field(
+            alias="projectionModelSrc",
+            description="Vision projector for the LLM encoder. Required for Qwen-Image-2.1 reference editing with its GGUF Qwen3-VL encoder; optional for text-to-image. Requires llmModelSrc and diffusion mode.",
         ),
     ] = None
     vae_model_src: Annotated[
         str | LoadModelSrcRequestSdcppGenerationModelConfigVaeModelSrc | None,
         Field(
             alias="vaeModelSrc",
-            description="VAE decoder model — required for FLUX.2 [klein], Ideogram 4, LTX-2 video, and MiniMax-H3 video; optional for SDXL.",
+            description="VAE decoder model, required for Qwen-Image-2.1, FLUX.2 [klein], Ideogram 4, LTX-2 video, and MiniMax-H3 video; optional for SDXL.",
         ),
     ] = None
     high_noise_diffusion_model_src: Annotated[
@@ -20017,7 +20569,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfig(GeneratedBaseModel):
     world: Annotated[
         LoadModelSrcRequestSdcppGenerationModelConfigWorld | None,
         Field(
-            description="ABot-World session tuning — mode: 'world' only, rejected in every other mode. Forwarded to the native session as-is.",
+            description="ABot-World session tuning — mode: 'world' only, rejected in every other mode. Session settings reach the addon; fitSteps controls only memory fit.",
             title="LoadModelSrcRequestSdcppGenerationModelConfigWorld",
         ),
     ] = None
@@ -20105,6 +20657,7 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestepTextEncModelSrcAddon(Enum
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -20215,6 +20768,7 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestepLmModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -20323,6 +20877,7 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestepDitModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -20431,6 +20986,7 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestepVaeModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -20632,6 +21188,7 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigMinimaxLmModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -20740,6 +21297,7 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigMinimaxSynthModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -21302,6 +21860,7 @@ class LoadModelSrcRequest(
         | LoadModelSrcRequestMossTranscribe
         | LoadModelSrcRequestLlamacppEmbedding
         | LoadModelSrcRequestLlamacppDecision
+        | LoadModelSrcRequestLlamacppRerank
         | LoadModelSrcRequestNmtcppTranslation
         | LoadModelSrcRequestTtsGgml
         | LoadModelSrcRequestGgmlOcr
@@ -21320,6 +21879,7 @@ class LoadModelSrcRequest(
         | LoadModelSrcRequestMossTranscribe
         | LoadModelSrcRequestLlamacppEmbedding
         | LoadModelSrcRequestLlamacppDecision
+        | LoadModelSrcRequestLlamacppRerank
         | LoadModelSrcRequestNmtcppTranslation
         | LoadModelSrcRequestTtsGgml
         | LoadModelSrcRequestGgmlOcr
@@ -21416,6 +21976,7 @@ class ReloadConfigRequestModelConfigVadModelSrcAddon(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -21904,6 +22465,7 @@ class ModelRegistryGetModelResponseModelEngine(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -22045,6 +22607,7 @@ class ModelRegistryListResponseModelsItemEngine(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -22208,6 +22771,7 @@ class ModelRegistrySearchResponseModelsItemEngine(Enum):
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
     llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
@@ -22757,6 +23321,38 @@ class RagProgressResponse(GeneratedBaseModel):
     current: float
     total: float
     timestamp: float
+
+
+class RerankRequest(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    query: Annotated[
+        str, Field(description="Query to score each document against.", min_length=1)
+    ]
+    documents: Annotated[
+        list[str],
+        Field(
+            description="Documents to score. Each one, paired with the query, must fit in `batch_size`.",
+            min_length=1,
+        ),
+    ]
+    model_id: Annotated[str, Field(alias="modelId", min_length=1)]
+    type: Literal["rerank"] = "rerank"
+    request_id: Annotated[str | None, Field(alias="requestId", min_length=1)] = None
+
+
+class RerankResponse(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["rerank"] = "rerank"
+    scores: Annotated[
+        list[float],
+        Field(
+            description="One relevance score per document, in input order. Higher is more relevant. Scores are the model's raw classifier output, so compare them within one model only."
+        ),
+    ]
 
 
 class ResumeRequest(GeneratedBaseModel):
@@ -25644,6 +26240,7 @@ class Request(
         | PluginInvokeRequest
         | PluginInvokeStreamRequest
         | Request_6
+        | RerankRequest
         | ResumeRequest
         | StartRpcServerRequest
         | StateRequest
@@ -25694,6 +26291,7 @@ class Request(
         | PluginInvokeRequest
         | PluginInvokeStreamRequest
         | Request_6
+        | RerankRequest
         | ResumeRequest
         | StartRpcServerRequest
         | StateRequest
@@ -25779,6 +26377,7 @@ class Response(
         | PluginInvokeStreamResponse
         | Response_1
         | RagProgressResponse
+        | RerankResponse
         | ResumeResponse
         | StartRpcServerResponse
         | StateResponse
@@ -25833,6 +26432,7 @@ class Response(
         | PluginInvokeStreamResponse
         | Response_1
         | RagProgressResponse
+        | RerankResponse
         | ResumeResponse
         | StartRpcServerResponse
         | StateResponse

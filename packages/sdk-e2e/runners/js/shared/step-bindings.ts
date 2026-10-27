@@ -34,6 +34,7 @@ import {
   ragCloseWorkspace,
   ragDeleteWorkspace,
   ragIngest,
+  rerank,
   resume,
   state,
   suspend,
@@ -62,6 +63,7 @@ const CALLS: Record<string, (params: never) => Promise<unknown>> = {
   // --- inference, request/reply -------------------------------------------
   embed: (params) => embed(params),
   classify: async (params) => ({ results: await classify(params) }),
+  rerank: async (params) => ({ scores: await rerank(params) }),
   /**
    * One transcription, bound under the name that says what came back: `metadata` swaps the flat
    * transcript for per-segment records, so a body that projected `text` off a metadata run would be
@@ -1497,6 +1499,20 @@ const ASSERTIONS: Record<
       return { passed: false, output: `missing fields: ${missing.join(', ')}` }
     }
     return { passed: true, output: `${fields.length} field(s) present` }
+  },
+
+  /** None of the named fields is present on the value. */
+  fieldsAbsent(value, args) {
+    if (!value || typeof value !== 'object') {
+      return { passed: false, output: `expected an object, got ${typeof value}` }
+    }
+    const record = value as Record<string, unknown>
+    const fields = (args.fields ?? []) as string[]
+    const present = fields.filter((field) => record[field] !== undefined)
+    if (present.length > 0) {
+      return { passed: false, output: `unexpected fields: ${present.join(', ')}` }
+    }
+    return { passed: true, output: `${fields.length} field(s) absent` }
   },
 
   /** The text is exactly the parts joined by the separator. */
