@@ -72,6 +72,16 @@ Each platform a target runs on is an Nx configuration of that target, named `<pl
 | `publish` | `publish` | `tagPrefix` for the release tag |
 | `secrets` | `test:integration`, `test:backend`, `benchmark`, `test:mobile` | secrets the command reads from its environment, from `SECRETS` in `select-projects.mjs` (`QASE_API_TOKEN`, `HF_TOKEN`) |
 
+### Models
+
+The jobs that run a target fetch its models first, from `test/integration/models.manifest.json` merged with `ci/models.manifest.json`; either file may be absent. Put models only CI stages in the `ci/` one, so a manifest the package's tests own stays as they expect. Each entry names one source:
+
+- `s3Path`: one object, into `dest`.
+- `s3Prefix`: a directory, synced into `dest`.
+- `urls`: pinned mirrors, into `dest`, by default `test/model/<name>`; `sha256` and `bytes` are checked when set.
+
+`targets` lists the targets that need the entry, by default `test:integration` only; `skip` lists `<platform>-<arch>` hosts that never need it; `warm: false` leaves it to the tests.
+
 `nx.json`'s `toolchain.hostSetup` names the toolkits each host installs for builds that compile native dependencies, and pins their versions.
 
 ### Native dependencies

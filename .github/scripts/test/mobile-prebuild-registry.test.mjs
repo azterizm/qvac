@@ -906,8 +906,9 @@ function mobileAddons() {
 
 const MOBILE_ADDONS = mobileAddons()
 
+// 7 since the fabric consumers moved to the CI contract's mobile-tests.yml.
 test('every mobile addon was discovered', () => {
-  assert.ok(MOBILE_ADDONS.length >= 13, `found ${MOBILE_ADDONS.length}`)
+  assert.ok(MOBILE_ADDONS.length >= 7, `found ${MOBILE_ADDONS.length}`)
 })
 
 for (const addon of MOBILE_ADDONS) {
@@ -991,7 +992,7 @@ test('every mobile dispatch input advertises the -mono GPR name', () => {
     .split('\n')
     .filter(Boolean)
 
-  assert.ok(workflows.length >= 13, `found ${workflows.length} mobile workflows`)
+  assert.ok(workflows.length >= 7, `found ${workflows.length} mobile workflows`)
 
   const offenders = []
   for (const relativePath of workflows) {
@@ -1123,7 +1124,7 @@ test('every mobile dispatch offers the run-id route, or is a pinned exemption', 
     { cwd: root, encoding: 'utf8' },
   ).stdout.trim().split('\n').filter(Boolean)
 
-  assert.ok(workflows.length >= 13, `found ${workflows.length} mobile workflows`)
+  assert.ok(workflows.length >= 7, `found ${workflows.length} mobile workflows`)
 
   const missing = []
   for (const relativePath of workflows) {
@@ -1155,13 +1156,6 @@ test('every mobile dispatch offers the run-id route, or is a pinned exemption', 
   }
 
   assert.deepEqual(missing, [], `incomplete prebuild_run_id wiring:\n${missing.join('\n')}`)
-})
-
-test('ggml-rpc-server skips same-run prebuilds for a pinned run and verifies the source', () => {
-  const source = read('.github/workflows/integration-mobile-test-ggml-rpc-server.yml')
-  assert.match(source, /prebuild-manual:\n\s+if: inputs\.platform != '' && inputs\.prebuild_run_id == ''/)
-  assert.match(source, /prebuild-run-id: \$\{\{ inputs\.prebuild_run_id \}\}/)
-  assert.match(source, /RESOLVED: \$\{\{ steps\.setup\.outputs\.prebuild-source-run-id \}\}/)
 })
 
 // The dispatch inputs are what people copy from, and the action rejects the

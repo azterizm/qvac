@@ -12,8 +12,8 @@ inputs:
     description: Only models whose targets include this one; empty means all
     default: ""
   manifest:
-    description: Manifest path inside workdir
-    default: test/integration/models.manifest.json
+    description: Comma-separated manifest paths inside workdir, merged; a missing one is skipped
+    default: test/integration/models.manifest.json,ci/models.manifest.json
 
 runs:
   using: composite

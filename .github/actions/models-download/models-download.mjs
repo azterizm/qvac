@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Each entry names its own source: s3Path (one object), s3Prefix (a directory, synced into dest) or pinned urls.
-// A url entry without dest lands in test/model/<name>, as main's cache-models stages it; warm: false ones are left to the tests.
+// An entry without targets serves test:integration. A url entry without dest lands in test/model/<name>, as main's cache-models stages it; warm: false ones are left to the tests.
 
 import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -39,7 +39,7 @@ export async function download({
 }) {
   let fetched = 0
   for (const [name, m] of Object.entries(manifest.models || {})) {
-    if (target && m.targets && !m.targets.includes(target)) continue
+    if (target && !(m.targets ?? ['test:integration']).includes(target)) continue
     if (m.skip?.includes(host) || m.warm === false) continue
     const dest = join(workdir, destOf(name, m))
     // A sync copies only what the directory lacks, so it runs every time.
@@ -61,10 +61,24 @@ export async function download({
   return fetched
 }
 
+// The tests' own manifest merged with ci/models.manifest.json, which holds models only CI stages; either may be absent.
+export function loadManifests(
+  workdir,
+  list = 'test/integration/models.manifest.json,ci/models.manifest.json'
+) {
+  const texts = list
+    .split(',')
+    .map((p) => join(workdir, p.trim()))
+    .filter((f) => existsSync(f))
+    .map((f) => readFileSync(f, 'utf8'))
+  return {
+    text: texts.join('\n'),
+    manifest: { models: Object.assign({}, ...texts.map((t) => JSON.parse(t).models)) }
+  }
+}
+
 async function main(env) {
-  const manifest = JSON.parse(
-    readFileSync(join(env.WORKDIR, env.MANIFEST || 'test/integration/models.manifest.json'), 'utf8')
-  )
+  const { manifest } = loadManifests(env.WORKDIR, env.MANIFEST || undefined)
   const aws = (args) => execFileSync('aws', [...args, '--only-show-errors'], { stdio: 'inherit' })
   const fetched = await download({
     manifest,

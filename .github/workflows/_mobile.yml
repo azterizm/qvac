@@ -98,7 +98,7 @@ jobs:
     runs-on: ${{ matrix.row.runner }}
     environment: release
     # No continue-on-error: a Device Farm failure must fail the run.
-    timeout-minutes: 120
+    timeout-minutes: ${{ matrix.row.timeout || 120 }}
     permissions:
       contents: read
       actions: read
@@ -187,6 +187,16 @@ jobs:
           workdir: ${{ env.WORKDIR }}
           expected-dirs: ${{ steps.run.outputs.expected-dirs }}
           source: ${{ inputs.prebuild_run_id != '' && format('run {0}', steps.run.outputs.source-run-id) || inputs.package || 'npm latest' }}
+      # Manifest models the mobile suite bundles, from the same bucket as the desktop tests.
+      - uses: tetherto/qvac-actions/configure-aws-credentials@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: eu-central-1
+      - uses: ./.github/actions/models-download
+        with:
+          workdir: ${{ env.WORKDIR }}
+          bucket: ${{ secrets.MODEL_S3_BUCKET }}
+          target: test:mobile
       # Device Farm lives in us-west-2, and the package presigns its models there; the session spans build and wait.
       - uses: tetherto/qvac-actions/configure-aws-credentials@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:

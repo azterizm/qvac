@@ -1,20 +1,28 @@
 #!/usr/bin/env node
 // The key hashes the manifest alone, so test or CI edits never throw models away.
 
-import { appendFileSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { basename, dirname, join, posix } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-// Same selection and destinations as models-download: url entries land in test/model/<name>, warm: false ones are not cached.
+// Same selection and destinations as models-download: no targets means test:integration, url entries land in test/model/<name>, warm: false ones are not cached.
 export function entriesFor(manifest, target) {
   return Object.entries(manifest.models || {})
-    .filter(([, m]) => (!target || !m.targets || m.targets.includes(target)) && m.warm !== false)
+    .filter(
+      ([, m]) =>
+        (!target || (m.targets ?? ['test:integration']).includes(target)) && m.warm !== false
+    )
     .map(([name, m]) => ({ name, ...m, dest: m.dest ?? `test/model/${name}` }))
 }
 
-export function resolve({ manifestText, workdir, target, version = 'v1' }) {
-  const manifest = JSON.parse(manifestText)
+export function resolve({
+  manifestText,
+  manifest = JSON.parse(manifestText),
+  workdir,
+  target,
+  version = 'v1'
+}) {
   const entries = entriesFor(manifest, target)
   const hash = createHash('sha256').update(manifestText).digest('hex').slice(0, 16)
   const prefix = `models-${basename(workdir)}-${target ? target.replace(/[^A-Za-z0-9]+/g, '-') : 'all'}-${version}-`
@@ -26,10 +34,27 @@ export function resolve({ manifestText, workdir, target, version = 'v1' }) {
   return { key: `${prefix}${hash}`, prefix, paths, count: entries.length }
 }
 
+// The tests' own manifest merged with ci/models.manifest.json, which holds models only CI stages; either may be absent.
+export function loadManifests(
+  workdir,
+  list = 'test/integration/models.manifest.json,ci/models.manifest.json'
+) {
+  const texts = list
+    .split(',')
+    .map((p) => join(workdir, p.trim()))
+    .filter((f) => existsSync(f))
+    .map((f) => readFileSync(f, 'utf8'))
+  return {
+    text: texts.join('\n'),
+    manifest: { models: Object.assign({}, ...texts.map((t) => JSON.parse(t).models)) }
+  }
+}
+
 function main(env) {
-  const manifestPath = join(env.WORKDIR, env.MANIFEST || 'test/integration/models.manifest.json')
+  const { text, manifest } = loadManifests(env.WORKDIR, env.MANIFEST || undefined)
   const r = resolve({
-    manifestText: readFileSync(manifestPath, 'utf8'),
+    manifestText: text,
+    manifest,
     workdir: env.WORKDIR,
     target: env.TARGET,
     version: env.VERSION

@@ -47,7 +47,8 @@ const METADATA = {
   toolchain: ['build'],
   mobile: ['test:mobile'],
   publish: ['publish'],
-  secrets: ['test:integration', 'test:backend', 'benchmark', 'test:mobile']
+  secrets: ['test:integration', 'test:backend', 'benchmark', 'test:mobile'],
+  baseline: ['cpp:tests']
 }
 // Secrets a target may ask for by name; each is named once in _desktop.yml or _mobile.yml, never indexed.
 export const SECRETS = ['QASE_API_TOKEN', 'HF_TOKEN']
@@ -209,6 +210,7 @@ export function select({ graph, affected, targets, labels, gate, configs = [] })
       dir: n.data.root,
       ...common,
       benchmarkReport: Boolean(n.data.targets.benchmark?.configurations?.[REPORT]),
+      cppBaseline: Boolean(n.data.targets['cpp:tests']?.metadata?.baseline),
       prebuildStatus: PREBUILD_KEYS.includes(gate[dir]),
       cppStatus: CPP_TEST_KEYS.includes(gate[dir])
     })
@@ -219,6 +221,11 @@ export function select({ graph, affected, targets, labels, gate, configs = [] })
       }
     }
   }
+  // A baseline package runs its C++ tests on every pull request, without the label, so new tests cannot land skipped
+  // (QVAC-25289); these rows build and test it alone.
+  const baseline = new Set(out.projects.filter((p) => p.cppBaseline).map((p) => p.name))
+  for (const t of ['build', 'cpp:tests'])
+    if (out.matrices[t]) out.matrices[`${t}:baseline`] = out.matrices[t].filter((r) => baseline.has(r.project))
   return out
 }
 

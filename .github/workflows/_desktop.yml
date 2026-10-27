@@ -90,7 +90,7 @@ jobs:
         with:
           workdir: ${{ env.WORKDIR }}
           target: ${{ matrix.row.target }}
-      - if: runner.environment != 'github-hosted'
+      - if: steps.models.outputs.paths != '' && runner.environment != 'github-hosted'
         uses: tetherto/qvac-actions/cache-restore@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
           key: ${{ steps.models.outputs.key }}
@@ -134,7 +134,7 @@ jobs:
           PROJECT: ${{ matrix.row.project }}
           TARGET: ${{ matrix.row.target }}
           CONFIG: ${{ matrix.row.config }}
-          QASE_API_TOKEN: ${{ contains(matrix.row.meta.secrets, 'QASE_API_TOKEN') && secrets.QASE_API_TOKEN || '' }}
+          QASE: ${{ contains(matrix.row.meta.secrets, 'QASE_API_TOKEN') && secrets.QASE_API_TOKEN || '' }}
           PERF_RUNS: ${{ inputs.perf_runs }}
           PERF_WARMUP_RUNS: ${{ inputs.perf_warmup_runs }}
           ARGS: ${{ inputs.args }}
@@ -143,6 +143,7 @@ jobs:
           if [ -n "$PERF_RUNS" ]; then export QVAC_PERF_RUNS="$PERF_RUNS"; fi
           if [ -n "$PERF_WARMUP_RUNS" ]; then export QVAC_PERF_WARMUP_RUNS="$PERF_WARMUP_RUNS"; fi
           if [ -n "$ARGS" ]; then export BENCHMARK_ARGS="$ARGS"; fi
+          if [ -n "$QASE" ]; then export QASE_API_TOKEN="$QASE"; fi
           pnpm exec nx run-many -t "$TARGET" -p "$PROJECT" -c "$CONFIG" --exclude-task-dependencies --outputStyle=stream
       # Diagnostic: the addon's DLL imports, for when LoadLibrary misses one.
       - if: failure() && runner.os == 'Windows'
