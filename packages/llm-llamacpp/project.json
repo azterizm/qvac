@@ -338,7 +338,10 @@
         "timeoutMinutes": 480,
         "secrets": [
           "QASE_API_TOKEN"
-        ]
+        ],
+        "perfReport": {
+          "title": "LLM Performance Report (All Platforms)"
+        }
       }
     },
     "test:mobile": {

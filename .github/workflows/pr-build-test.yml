@@ -163,6 +163,40 @@ jobs:
     with:
       rows: ${{ toJSON(fromJSON(needs.select.outputs.matrices).desktop) }}
 
+  # One cross-platform report per package whose test:integration asks for it, from the desktop jobs' perf artifacts.
+  perf-report:
+    needs: [select, desktop]
+    if: always() && !cancelled() && needs.desktop.result != 'skipped'
+    name: perf-report ${{ matrix.project.slug }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(needs.select.outputs.projects) }}
+    steps:
+      - if: matrix.project.perfReport
+        name: Checkout actions and report scripts
+        uses: tetherto/qvac-actions/checkout@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          sparse-checkout: |
+            .github/actions
+            scripts/perf-report
+          persist-credentials: false
+      - if: matrix.project.perfReport
+        uses: tetherto/qvac-actions/setup-node@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          node-version: lts/*
+      - if: matrix.project.perfReport
+        uses: ./.github/actions/run-mobile-integration-tests/combine-perf-reports
+        with:
+          artifact-pattern: ${{ matrix.project.slug }}-perf-*
+          report-title: ${{ matrix.project.perfReport.title }}
+          exclude: ${{ matrix.project.perfReport.exclude }}
+
   # The gate's qvac/prebuild-<key> and qvac/cpp-tests-<key>; a skip passes only when routing chose not to run.
   status:
     needs: [select, route, build, merge, cpp-tests]
@@ -211,7 +245,7 @@ jobs:
   # Not named qvac-merge-guard: that is the required check's job, and a second one would share its context.
   # Reads this run's jobs, so the table shows each package, stage and failed job, not only the reusable callers.
   summary:
-    needs: [select, fork-approval, route, trust, build, merge, cpp-lint, cpp-tests, desktop, status]
+    needs: [select, fork-approval, route, trust, build, merge, cpp-lint, cpp-tests, desktop, perf-report, status]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

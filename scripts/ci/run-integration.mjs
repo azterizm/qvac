@@ -8,7 +8,7 @@
 // package unless the environment already sets it; --set sets NAME to a literal.
 
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { constants } from 'node:os'
 import { pathToFileURL } from 'node:url'
@@ -52,13 +52,21 @@ function run(args, { cwd, env, logFile }) {
   })
 }
 
-// The suite's performance reports, into the run's step summary, passing or not.
+// The suite's performance reports, named for this host when the suite left the device unnamed so the PR report groups
+// them by platform, then into the run's step summary, passing or not.
 function renderPerfSummary(cwd) {
-  if (!process.env.GITHUB_STEP_SUMMARY) return
   const dir = join(cwd, 'test/results')
   const reports = existsSync(dir)
     ? readdirSync(dir).filter((f) => /^performance-report.*\.json$/.test(f))
     : []
+  for (const report of reports) {
+    const file = join(dir, report)
+    const data = JSON.parse(readFileSync(file, 'utf8'))
+    if (data.device?.name) continue
+    data.device = { ...data.device, name: `${process.platform}-${process.arch}` }
+    writeFileSync(file, JSON.stringify(data, null, 2))
+  }
+  if (!process.env.GITHUB_STEP_SUMMARY) return
   const renderer = join(cwd, '../../scripts/perf-report/render-step-summary.js')
   for (const report of reports)
     execFileSync('node', [renderer, join(dir, report), process.env.GITHUB_STEP_SUMMARY], {

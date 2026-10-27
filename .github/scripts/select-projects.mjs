@@ -48,7 +48,8 @@ const METADATA = {
   mobile: ['test:mobile'],
   publish: ['publish'],
   secrets: ['test:integration', 'test:backend', 'benchmark', 'test:mobile'],
-  baseline: ['cpp:tests']
+  baseline: ['cpp:tests'],
+  perfReport: ['test:integration']
 }
 // Secrets a target may ask for by name; each is named once in _desktop.yml or _mobile.yml, never indexed.
 export const SECRETS = ['QASE_API_TOKEN', 'HF_TOKEN']
@@ -211,6 +212,7 @@ export function select({ graph, affected, targets, labels, gate, configs = [] })
       ...common,
       benchmarkReport: Boolean(n.data.targets.benchmark?.configurations?.[REPORT]),
       cppBaseline: Boolean(n.data.targets['cpp:tests']?.metadata?.baseline),
+      perfReport: n.data.targets['test:integration']?.metadata?.perfReport ?? null,
       prebuildStatus: PREBUILD_KEYS.includes(gate[dir]),
       cppStatus: CPP_TEST_KEYS.includes(gate[dir])
     })

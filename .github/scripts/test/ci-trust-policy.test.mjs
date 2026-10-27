@@ -1423,6 +1423,7 @@ test("pr-build-test: every non-exempt job gates on trust", () => {
     ["route", "reads PR labels from a trusted sparse checkout; runs no PR code"],
     ["trust", "needs fork-approval already, and is the second half of the gate"],
     ["merge", "only moves artifacts the gated build uploaded"],
+    ["perf-report", "trusted sparse checkout; renders the reports the gated desktop jobs uploaded"],
     ["status", "trusted sparse checkout; publishes a commit status after gated jobs"],
     ["summary", "trusted sparse checkout; summarizes the run"],
   ]);
