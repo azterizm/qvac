@@ -70,7 +70,7 @@ Each platform a target runs on is an Nx configuration of that target, named `<pl
 | `toolchain` | `build` | toolchain pins; set once in `nx.json`'s build `targetDefaults` |
 | `mobile` | `test:mobile` | `devicefarmProject`, `enablesPerf`, `mochaTimeoutMs`, `perTestTimeoutMinutes`, `perfReport` |
 | `publish` | `publish` | `tagPrefix` for the release tag |
-| `secrets` | `test:integration`, `test:backend`, `benchmark`, `test:mobile` | secrets the command reads from its environment, from `SECRETS` in `select-projects.mjs` (`QASE_API_TOKEN`, `HF_TOKEN`) |
+| `secrets` | `test:integration`, `test:backend`, `benchmark`, `test:mobile` | secrets the command reads from its environment, from `SECRETS` in `select-projects.mjs` (`QASE_API_TOKEN`, `HF_TOKEN`, `MODEL_S3_BUCKET`) |
 
 ### Models
 

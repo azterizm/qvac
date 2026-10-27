@@ -135,6 +135,7 @@ jobs:
           TARGET: ${{ matrix.row.target }}
           CONFIG: ${{ matrix.row.config }}
           QASE: ${{ contains(matrix.row.meta.secrets, 'QASE_API_TOKEN') && secrets.QASE_API_TOKEN || '' }}
+          BUCKET: ${{ contains(matrix.row.meta.secrets, 'MODEL_S3_BUCKET') && secrets.MODEL_S3_BUCKET || '' }}
           PERF_RUNS: ${{ inputs.perf_runs }}
           PERF_WARMUP_RUNS: ${{ inputs.perf_warmup_runs }}
           ARGS: ${{ inputs.args }}
@@ -144,6 +145,7 @@ jobs:
           if [ -n "$PERF_WARMUP_RUNS" ]; then export QVAC_PERF_WARMUP_RUNS="$PERF_WARMUP_RUNS"; fi
           if [ -n "$ARGS" ]; then export BENCHMARK_ARGS="$ARGS"; fi
           if [ -n "$QASE" ]; then export QASE_API_TOKEN="$QASE"; fi
+          if [ -n "$BUCKET" ]; then export MODEL_S3_BUCKET="$BUCKET"; fi
           pnpm exec nx run-many -t "$TARGET" -p "$PROJECT" -c "$CONFIG" --exclude-task-dependencies --outputStyle=stream
       # Diagnostic: the addon's DLL imports, for when LoadLibrary misses one.
       - if: failure() && runner.os == 'Windows'

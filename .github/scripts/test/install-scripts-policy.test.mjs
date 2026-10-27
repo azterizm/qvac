@@ -159,7 +159,6 @@ const PENDING = [
     ['.github/workflows/benchmark-llm-llamacpp.yml', 2],
     ['.github/workflows/benchmark-perf-embed-llamacpp.yml', 2],
     ['.github/workflows/benchmark-perf-llm-llamacpp.yml', 2],
-    ['.github/workflows/benchmark-translation-nmtcpp.yml', 2],
     ['.github/workflows/benchmark-vlm-model-comparison.yml', 1],
   ].map(([file, count]) => ({
     file,

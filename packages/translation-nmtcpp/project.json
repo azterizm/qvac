@@ -323,6 +323,50 @@
         }
       }
     },
+    "benchmark": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "cwd": "packages/translation-nmtcpp",
+        "parallel": false,
+        "commands": [
+          {
+            "command": "bash ci/benchmark.sh",
+            "forwardAllArgs": true
+          }
+        ]
+      },
+      "configurations": {
+        "linux-x64": {
+          "ci": {
+            "runner": "ubuntu_2404"
+          }
+        },
+        "darwin-arm64": {
+          "ci": {
+            "runner": "macos_arm64_gpu"
+          }
+        },
+        "win32-x64": {
+          "ci": {
+            "runner": "win_2025_x64_gpu"
+          }
+        },
+        "report": {
+          "commands": [
+            "node ci/benchmark-report.mjs"
+          ]
+        }
+      },
+      "metadata": {
+        "timeoutMinutes": 360,
+        "secrets": [
+          "MODEL_S3_BUCKET"
+        ]
+      }
+    },
     "cache:models": {
       "executor": "nx:noop"
     },

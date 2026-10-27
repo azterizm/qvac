@@ -52,7 +52,7 @@ const METADATA = {
   perfReport: ['test:integration']
 }
 // Secrets a target may ask for by name; each is named once in _desktop.yml or _mobile.yml, never indexed.
-export const SECRETS = ['QASE_API_TOKEN', 'HF_TOKEN']
+export const SECRETS = ['QASE_API_TOKEN', 'HF_TOKEN', 'MODEL_S3_BUCKET']
 const PUBLISH_KEYS = ['tagPrefix']
 const MOBILE_KEYS = [
   'devicefarmProject',
