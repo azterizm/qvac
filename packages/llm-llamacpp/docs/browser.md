@@ -18,9 +18,10 @@ browser:
 | `bare-path` | `browser/path.js` (POSIX subset) |
 
 `binding.browser.js` loads `./prebuilds/web/llm-llamacpp.mjs` with a dynamic
-`import()`. The `.wasm` file is fetched next to that module, so ship both
-files together, for example by marking `*llm-llamacpp.mjs` external and
-copying `prebuilds/web` beside your worker bundle.
+`import()`, and that module fetches `llm-llamacpp.wasm` from its own URL. Most
+bundlers (Vite, webpack) emit both as assets. A prebuilt bundle can instead
+leave the module external as `@qvac/llm-llamacpp/prebuilds/web/llm-llamacpp.mjs`,
+a subpath the package exports for that purpose.
 
 ## Requirements
 
