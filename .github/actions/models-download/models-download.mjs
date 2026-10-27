@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Source "s3" fetches each entry's s3Path into its dest. Without a source, entries carry pinned urls and land in
-// test/model/<name>, as main's cache-models stages them; warm: false entries are left to the tests.
+// Each entry names its own source: s3Path (one object), s3Prefix (a directory, synced into dest) or pinned urls.
+// A url entry without dest lands in test/model/<name>, as main's cache-models stages it; warm: false ones are left to the tests.
 
 import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -25,7 +25,7 @@ export async function matches(file, entry) {
   return true
 }
 
-const destOf = (name, m) => m.dest ?? `test/model/${name}`
+export const destOf = (name, m) => m.dest ?? `test/model/${name}`
 
 // An entry's `skip` lists <platform>-<arch> hosts that never need it.
 export async function download({
@@ -34,21 +34,27 @@ export async function download({
   target,
   host = `${process.platform}-${process.arch}`,
   fetchObject,
+  syncPrefix,
   fetchUrls
 }) {
-  if (manifest.source !== undefined && manifest.source !== 's3')
-    throw new Error(`models-download supports source "s3" or pinned urls, got "${manifest.source}"`)
   let fetched = 0
   for (const [name, m] of Object.entries(manifest.models || {})) {
     if (target && m.targets && !m.targets.includes(target)) continue
     if (m.skip?.includes(host) || m.warm === false) continue
-    const file = join(workdir, destOf(name, m))
-    if (await matches(file, m)) continue
-    mkdirSync(dirname(file), { recursive: true })
-    rmSync(file, { force: true })
-    if (manifest.source === 's3') fetchObject(m.s3Path, file)
-    else fetchUrls(m.urls, file)
-    if (!(await matches(file, m)))
+    const dest = join(workdir, destOf(name, m))
+    // A sync copies only what the directory lacks, so it runs every time.
+    if (m.s3Prefix) {
+      mkdirSync(dest, { recursive: true })
+      syncPrefix(m.s3Prefix, dest)
+      continue
+    }
+    if (await matches(dest, m)) continue
+    mkdirSync(dirname(dest), { recursive: true })
+    rmSync(dest, { force: true })
+    if (m.s3Path) fetchObject(m.s3Path, dest)
+    else if (m.urls?.length) fetchUrls(m.urls, dest)
+    else throw new Error(`${name}: an entry needs s3Path, s3Prefix or urls`)
+    if (!(await matches(dest, m)))
       throw new Error(`${name}: downloaded file does not match its pinned size or sha256`)
     fetched++
   }
@@ -59,14 +65,13 @@ async function main(env) {
   const manifest = JSON.parse(
     readFileSync(join(env.WORKDIR, env.MANIFEST || 'test/integration/models.manifest.json'), 'utf8')
   )
+  const aws = (args) => execFileSync('aws', [...args, '--only-show-errors'], { stdio: 'inherit' })
   const fetched = await download({
     manifest,
     workdir: env.WORKDIR,
     target: env.TARGET,
-    fetchObject: (key, file) =>
-      execFileSync('aws', ['s3', 'cp', `s3://${env.BUCKET}/${key}`, file, '--only-show-errors'], {
-        stdio: 'inherit'
-      }),
+    fetchObject: (key, file) => aws(['s3', 'cp', `s3://${env.BUCKET}/${key}`, file]),
+    syncPrefix: (prefix, dir) => aws(['s3', 'sync', `s3://${env.BUCKET}/${prefix}`, dir]),
     // Each mirror in turn, with curl's own retries; a pinned sha256 checks whichever answered.
     fetchUrls: (urls, file) => {
       for (const [i, url] of urls.entries()) {

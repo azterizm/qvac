@@ -18,7 +18,9 @@ export function resolve({ manifestText, workdir, target, version = 'v1' }) {
   const entries = entriesFor(manifest, target)
   const hash = createHash('sha256').update(manifestText).digest('hex').slice(0, 16)
   const prefix = `models-${basename(workdir)}-${target ? target.replace(/[^A-Za-z0-9]+/g, '-') : 'all'}-${version}-`
-  const dirs = [...new Set(entries.map((e) => posix.join(workdir, dirname(e.dest))))].sort()
+  // An s3Prefix entry's dest is the directory itself.
+  const dirOf = (e) => (e.s3Prefix ? e.dest.replace(/\/+$/, '') : dirname(e.dest))
+  const dirs = [...new Set(entries.map((e) => posix.join(workdir, dirOf(e))))].sort()
   // A directory inside another listed one is already cached with it.
   const paths = dirs.filter((d) => !dirs.some((o) => d.startsWith(`${o}/`)))
   return { key: `${prefix}${hash}`, prefix, paths, count: entries.length }

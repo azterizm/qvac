@@ -38,6 +38,10 @@ on:
         type: choice
         options: [Android, iOS]
         default: Android
+      devices:
+        description: Comma-separated Device Farm models for the mobile run, e.g. Google Pixel 9
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -133,6 +137,7 @@ jobs:
     with:
       rows: ${{ toJSON(fromJSON(needs.select-mobile.outputs.matrices)['test:mobile']) }}
       platform: ${{ inputs.platform }}
+      devices: ${{ inputs.devices }}
       prebuild_run_id: ${{ github.run_id }}
 
   # benchmark's report configuration, once per package, over every desktop and mobile result this run uploaded.

@@ -46,8 +46,11 @@ const METADATA = {
   timeoutMinutes: null,
   toolchain: ['build'],
   mobile: ['test:mobile'],
-  publish: ['publish']
+  publish: ['publish'],
+  secrets: ['test:integration', 'test:backend', 'benchmark', 'test:mobile']
 }
+// Secrets a target may ask for by name; each is named once in _desktop.yml or _mobile.yml, never indexed.
+export const SECRETS = ['QASE_API_TOKEN', 'HF_TOKEN']
 const PUBLISH_KEYS = ['tagPrefix']
 const MOBILE_KEYS = [
   'devicefarmProject',
@@ -57,7 +60,7 @@ const MOBILE_KEYS = [
   'perfReport'
 ]
 // Each needs its secret named in _mobile.yml's PROJECT_ARN.
-export const DEVICEFARM_PROJECTS = ['LLAMACPP_EMBED']
+export const DEVICEFARM_PROJECTS = ['LLAMACPP_EMBED', 'LLM', 'OCR_FASTTEXT', 'NMTCPP']
 
 // benchmark's report configuration reads every other configuration's results, so it runs once, after them, never as a row.
 export const REPORT = 'report'
@@ -106,6 +109,11 @@ export function checkMetadata(project, target) {
         `${project.name} ${target}: no Device Farm project secret is mapped for '${meta.mobile.devicefarmProject}'`
       )
   }
+  const unknownSecrets = (meta.secrets ?? []).filter((s) => !SECRETS.includes(s))
+  if (unknownSecrets.length)
+    throw new Error(
+      `${project.name} ${target}: metadata.secrets takes ${SECRETS.join(', ')}, found ${unknownSecrets.join(', ')}`
+    )
   if (meta.publish) {
     const extra = Object.keys(meta.publish).filter((k) => !PUBLISH_KEYS.includes(k))
     if (extra.length)

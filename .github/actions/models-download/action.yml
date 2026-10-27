@@ -1,5 +1,5 @@
 name: Download models
-description: Fetch the manifest's models a target needs that are not already present, from S3 or the pinned URLs. An S3 manifest needs the job to hold the credentials.
+description: Fetch the manifest's models a target needs that are not already present, from S3 objects, S3 directories or pinned URLs. S3 entries need the job to hold the credentials.
 
 inputs:
   workdir:

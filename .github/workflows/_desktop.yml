@@ -134,6 +134,7 @@ jobs:
           PROJECT: ${{ matrix.row.project }}
           TARGET: ${{ matrix.row.target }}
           CONFIG: ${{ matrix.row.config }}
+          QASE_API_TOKEN: ${{ contains(matrix.row.meta.secrets, 'QASE_API_TOKEN') && secrets.QASE_API_TOKEN || '' }}
           PERF_RUNS: ${{ inputs.perf_runs }}
           PERF_WARMUP_RUNS: ${{ inputs.perf_warmup_runs }}
           ARGS: ${{ inputs.args }}
