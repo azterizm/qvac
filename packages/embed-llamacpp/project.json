@@ -358,6 +358,47 @@
         ]
       }
     },
+    "benchmark": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "cwd": "packages/embed-llamacpp",
+        "parallel": false,
+        "commands": [
+          {
+            "command": "node ci/benchmark.mjs",
+            "forwardAllArgs": true
+          }
+        ]
+      },
+      "configurations": {
+        "linux-x64-gpu2204": {
+          "args": "--suites sweep",
+          "ci": {
+            "runner": "linux_ubuntu2204_x64_gpu"
+          }
+        },
+        "linux-x64-quality": {
+          "args": "--suites quality",
+          "ci": {
+            "runner": "ai_run_linux_gpu"
+          }
+        },
+        "report": {
+          "commands": [
+            "node ci/benchmark-report.mjs"
+          ]
+        }
+      },
+      "metadata": {
+        "timeoutMinutes": 420,
+        "secrets": [
+          "HF_TOKEN"
+        ]
+      }
+    },
     "cache:models": {
       "executor": "nx:noop"
     },

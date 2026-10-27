@@ -42,6 +42,10 @@ on:
         description: Comma-separated Device Farm models for the mobile run, e.g. Google Pixel 9
         type: string
         default: ""
+      tests:
+        description: Optional mocha --grep over the mobile test names; empty runs what the package's test:mobile selects
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -138,7 +142,11 @@ jobs:
       rows: ${{ toJSON(fromJSON(needs.select-mobile.outputs.matrices)['test:mobile']) }}
       platform: ${{ inputs.platform }}
       devices: ${{ inputs.devices }}
+      tests: ${{ inputs.tests }}
       prebuild_run_id: ${{ github.run_id }}
+      args: ${{ inputs.args }}
+      perf_runs: ${{ inputs.perf_runs }}
+      perf_warmup_runs: ${{ inputs.perf_warmup_runs }}
 
   # benchmark's report configuration, once per package, over every desktop and mobile result this run uploaded.
   report:
@@ -178,6 +186,12 @@ jobs:
         uses: tetherto/qvac-actions/download-artifact@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
           pattern: ${{ matrix.project.slug }}-*
+          path: ${{ matrix.project.dir }}/benchmarks/results
+      # The mobile runs' device logs, which a report such as llm's VLM matrix reads.
+      - if: matrix.project.benchmarkReport
+        uses: tetherto/qvac-actions/download-artifact@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          pattern: console-logs-${{ matrix.project.slug }}-*
           path: ${{ matrix.project.dir }}/benchmarks/results
       - if: matrix.project.benchmarkReport
         shell: bash

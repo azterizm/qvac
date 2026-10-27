@@ -381,6 +381,71 @@
         ]
       }
     },
+    "benchmark": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "cwd": "packages/llm-llamacpp",
+        "parallel": false,
+        "commands": [
+          {
+            "command": "node ci/benchmark.mjs",
+            "forwardAllArgs": true
+          }
+        ]
+      },
+      "configurations": {
+        "linux-x64": {
+          "args": "--suites vlm --vlm-host linux --vlm-backends cpu",
+          "ci": {
+            "runner": "linux_ubuntu2204_x64"
+          }
+        },
+        "linux-x64-gpu": {
+          "args": "--suites vlm --vlm-host linux --vlm-backends gpu",
+          "ci": {
+            "runner": "linux_ubuntu2404_x64_gpu"
+          }
+        },
+        "linux-x64-gpu2204": {
+          "args": "--suites sweep",
+          "ci": {
+            "runner": "linux_ubuntu2204_x64_gpu"
+          }
+        },
+        "linux-x64-quality": {
+          "args": "--suites quality",
+          "ci": {
+            "runner": "ai_run_linux_gpu"
+          }
+        },
+        "darwin-arm64": {
+          "args": "--suites vlm --vlm-host macos --vlm-backends cpu,gpu",
+          "ci": {
+            "runner": "macos_arm64_gpu"
+          }
+        },
+        "win32-x64": {
+          "args": "--suites vlm --vlm-host windows --vlm-backends cpu,gpu",
+          "ci": {
+            "runner": "win_2025_x64_gpu"
+          }
+        },
+        "report": {
+          "commands": [
+            "node ci/benchmark-report.mjs"
+          ]
+        }
+      },
+      "metadata": {
+        "timeoutMinutes": 420,
+        "secrets": [
+          "HF_TOKEN"
+        ]
+      }
+    },
     "cache:models": {
       "executor": "nx:noop"
     },

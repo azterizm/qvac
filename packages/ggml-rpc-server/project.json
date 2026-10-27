@@ -372,5 +372,8 @@
         }
       }
     }
-  }
+  },
+  "implicitDependencies": [
+    "qvac-addon-cmake"
+  ]
 }

@@ -155,11 +155,6 @@ const PENDING = [
   // PR 4 — dispatch-only benchmark lanes; each needs a manual run to verify.
   ...[
     ['.github/workflows/benchmark-asr-ggml.yml', 3],
-    ['.github/workflows/benchmark-embed-llamacpp.yml', 2],
-    ['.github/workflows/benchmark-llm-llamacpp.yml', 2],
-    ['.github/workflows/benchmark-perf-embed-llamacpp.yml', 2],
-    ['.github/workflows/benchmark-perf-llm-llamacpp.yml', 2],
-    ['.github/workflows/benchmark-vlm-model-comparison.yml', 1],
   ].map(([file, count]) => ({
     file,
     match: 'npm install',

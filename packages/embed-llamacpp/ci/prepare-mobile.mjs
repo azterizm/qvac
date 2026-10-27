@@ -3,10 +3,12 @@
 // the Laya model, then emits the host pre-stage commands that fetch them.
 
 import { execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { emitPrestage, seedAndPresign } from '../../../scripts/ci/mobile-prestage.mjs'
+import { emitOutputs, emitPrestage, seedAndPresign } from '../../../scripts/ci/mobile-prestage.mjs'
+import { dispatch } from './benchmark.mjs'
 
 const PKG = fileURLToPath(new URL('..', import.meta.url))
 const TEMP = process.env.RUNNER_TEMP
@@ -37,3 +39,22 @@ emitPrestage(PKG, {
     PRESTAGE_S3_MODELS: join(TEMP, 'laya-model-urls.json')
   }
 })
+
+// A benchmarks.yml sweep run (BENCHMARK_ARGS) runs one of the sweep's mobile batches (batch=, else the first) instead
+// of the regular groups.
+if (process.env.BENCHMARK_ARGS) {
+  const suite = dispatch(process.env.BENCHMARK_ARGS.split(/\s+/).filter(Boolean))
+  if (suite.name === 'sweep') {
+    const batches = createRequire(import.meta.url)(
+      '../test/integration/_benchmark-matrix.js'
+    ).workflowBatches()
+    const batch =
+      batches.find((b) => b.config === suite.values.batch) ??
+      (suite.values.batch ? null : batches[0])
+    if (!batch)
+      throw new Error(
+        `batch=${suite.values.batch} is not one of ${batches.map((b) => b.config).join(', ')}`
+      )
+    emitOutputs({ 'test-groups': JSON.stringify(batch.groups) })
+  }
+}
