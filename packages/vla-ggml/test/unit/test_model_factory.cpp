@@ -204,7 +204,7 @@ TEST(VlaModelFactory, RejectsUnknownArchitecture) {
 // on a missing tensor. On a host that does have a GPU, selection succeeds and
 // that message must be absent; what follows is either the missing-tensor
 // error or, for a loader that allocates device buffers before it checks the
-// tensor list (pi05 on Metal), the strict "weight alloc failed" refusal. Both
+// tensor list (pi05 on Metal), the strict "weight load failed" refusal. Both
 // branches are asserted so the test means something on CPU-only CI runners
 // and on GPU dev boxes alike.
 namespace {
@@ -213,6 +213,9 @@ constexpr const char* NO_DEVICE_MESSAGE = "matched no usable GPU device";
 
 void expectOverrideStrictness(const char* arch) {
   const std::vector<std::string> override{"cuda"};
+  // The loaders register dynamic backends on first load. Do it here too, or
+  // the probe sees no GPU when this test runs first (--gtest_filter, shuffle).
+  vla_backend_selection::loadBackendsOnce("");
   const bool hostHasGpu =
       vla_backend_selection::pickBestGpuDevice(override) != nullptr;
   const std::string path = writeTempGguf(arch);
@@ -225,6 +228,9 @@ void expectOverrideStrictness(const char* arch) {
     const std::string what = e.what();
     const bool refusedForNoDevice =
         what.find(NO_DEVICE_MESSAGE) != std::string::npos;
+    // "backend: " would make index.js report INVALID_CONFIG instead of
+    // FAILED_TO_LOAD_WEIGHTS.
+    EXPECT_EQ(what.find("backend: "), std::string::npos) << what;
     if (hostHasGpu) {
       EXPECT_FALSE(refusedForNoDevice)
           << arch << ": a usable GPU exists, so the loader must not claim "

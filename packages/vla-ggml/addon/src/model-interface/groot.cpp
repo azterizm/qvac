@@ -1423,6 +1423,9 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   m->has_gpu = false;
 
   // Same rule as pi05LoadModel: a named backend never lands on CPU silently.
+  // PUBLIC ERROR-CODE CONTRACT: the strict throws below must not contain
+  // "backend: " (NATIVE_ERR_MARKERS.badBackend in src/index.ts), so the JS
+  // wrapper reports them as FAILED_TO_LOAD_WEIGHTS, as the docs promise.
   const bool strictGpu =
       vla_backend_selection::backendOverrideIsStrict(backendOverride);
   const std::string overrideText =
@@ -1662,7 +1665,7 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
         // ~GrootModelInternal frees bufs_w, the GPU backend, gguf and ctx_w.
         throw std::runtime_error(
             "grootLoadModel: backend override '" + overrideText +
-            "' GPU weight alloc failed on " + m->backend_name +
+            "' GPU weight load failed on " + m->backend_name +
             "; not falling back to CPU");
       }
       QLOG_IF(

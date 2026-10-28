@@ -1115,6 +1115,9 @@ static std::unique_ptr<Pi05ModelInternal> pi05LoadModel(
   // weight cudaMalloc failed with NvMap error 12 and warmup went from 1 s to
   // 50 s per chunk), so every CPU fallback below throws instead when the
   // caller named a backend. 'auto', alone or in the list, keeps the fallback.
+  // PUBLIC ERROR-CODE CONTRACT: the strict throws below must not contain
+  // "backend: " (NATIVE_ERR_MARKERS.badBackend in src/index.ts), so the JS
+  // wrapper reports them as FAILED_TO_LOAD_WEIGHTS, as the docs promise.
   const bool strictGpu =
       vla_backend_selection::backendOverrideIsStrict(backendOverride);
   const std::string overrideText =
@@ -1295,7 +1298,7 @@ static std::unique_ptr<Pi05ModelInternal> pi05LoadModel(
         // ~Pi05ModelInternal frees the GPU backend, gguf and ctx_w.
         throw std::runtime_error(
             "pi05LoadModel: backend override '" + overrideText +
-            "' GPU weight alloc failed on " + m->backend_name +
+            "' GPU weight load failed on " + m->backend_name +
             "; not falling back to CPU");
       }
       QLOG_IF(

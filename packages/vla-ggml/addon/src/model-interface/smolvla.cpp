@@ -862,6 +862,9 @@ static bool tryInitGpuBackend(
         "smolvla_load_model: force_cpu=true — skipping GPU selection");
     return true;
   }
+  // PUBLIC ERROR-CODE CONTRACT: the strict load_error text below must not
+  // contain "backend: " (NATIVE_ERR_MARKERS.badBackend in src/index.ts), so the
+  // JS wrapper reports them as FAILED_TO_LOAD_WEIGHTS, as the docs promise.
   const bool strictGpu =
       vla_backend_selection::backendOverrideIsStrict(backendOverride);
   const std::string overrideText =
