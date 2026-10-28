@@ -93,6 +93,7 @@
     "bare-stream": "^2.7.0",
     "brittle": "^3.4.0",
     "cmake-bare": "^1.9.0",
+    "cmake-npm": "^1.1.0",
     "cmake-vcpkg": "^1.1.0",
     "eslint": "^9.39.4",
     "eslint-import-resolver-typescript": "^4.4.5",
