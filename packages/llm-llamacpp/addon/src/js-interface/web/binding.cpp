@@ -125,7 +125,9 @@ LlamaModel::Prompt parsePrompt(const json& messages) {
       prompt.input = message.at("input").get<std::string>();
       prompt.prefill = message.value("prefill", false);
       if (auto it = message.find("generationParams");
-          it != message.end() && it->is_object()) {
+          it != message.end() && !it->is_null()) {
+        if (!it->is_object())
+          wrongType("generationParams", "object");
         applyGenerationParamHandlers(jsonSource(*it), prompt.generationParams);
       }
       prompt.cacheKey = message.value("cacheKey", "");

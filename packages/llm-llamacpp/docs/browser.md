@@ -60,7 +60,8 @@ Supported:
 - Reasoning models
 - Tool calling
 - Generation parameters
-- Per-job cancel, including on the CPU fallback
+- Per-job cancel, also on the CPU fallback. It takes effect at the next
+  generated token, so a long prompt evaluation on the CPU finishes first.
 - Runtime stats
 - `saveCache`/`discardCache` (cache files live in memory)
 - Load and unload
@@ -70,6 +71,7 @@ Supported:
 | `parallel` > 1 and batch `run()` | Rejected at load/run |
 | Sharded models (`files.model` with more than one file) | Rejected at load |
 | `load_mode` other than `auto`/`none` | Rejected at load; weights are read, never memory-mapped |
+| Media (image/audio) messages | Rejected at run |
 | `finetune()` | Throws: not exposed by the browser binding |
 | `assessFit()` | Rejects |
 

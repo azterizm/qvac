@@ -901,6 +901,7 @@ jobs:
           lock="$WORKDIR/web/source-lock.json"
           version="$(jq -r .emscripten.version "$lock")"
           commit="$(jq -r .emscripten.emsdkCommit "$lock")"
+          sudo apt-get update -qq
           sudo apt-get install -y ninja-build
           git clone --quiet https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
           git -C "$RUNNER_TEMP/emsdk" checkout --quiet "$commit"

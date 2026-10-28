@@ -122,12 +122,7 @@ function activate(handle) {
     if (config && config.parallel !== undefined && String(config.parallel) !== '1') {
       throw new Error('parallel > 1 is not supported in the browser build')
     }
-    // Mounted files cannot be memory-mapped; read them into the backend.
-    const loadMode = config && config.load_mode
-    if (loadMode !== undefined && loadMode !== 'auto' && loadMode !== 'none') {
-      throw new Error(`load_mode '${loadMode}' is not supported in the browser build`)
-    }
-    const nativeConfig = { ...config, load_mode: 'none' }
+    const nativeConfig = browserLoadConfig(config)
     const modelPath = await mount(module, handle, path)
     const projection = await mount(module, handle, projectionPath)
     handle.native = check(
@@ -144,22 +139,39 @@ function activate(handle) {
   })
 }
 
-function toNativeMessage(message) {
-  if (message.type === 'media') {
-    return { type: 'media', content: Array.from(message.content) }
+// Mounted files cannot be memory-mapped, so weights are always read
+// (load_mode 'none'). 'auto' is accepted as the default; any other mode, and
+// the legacy per-flag keys, are rejected rather than silently overridden.
+const LEGACY_LOAD_KEYS = ['mmap', 'no_mmap', 'direct_io', 'no_direct_io', 'mlock']
+
+function browserLoadConfig(config = {}) {
+  for (const key of LEGACY_LOAD_KEYS) {
+    if (config[key] !== undefined) {
+      throw new Error(
+        `${key} is not supported in the browser build; weights are always read into memory`
+      )
+    }
   }
-  return message
+  const { 'load-mode': alias, ...rest } = config
+  const requested = rest.load_mode ?? alias
+  if (requested !== undefined && !['auto', 'none'].includes(String(requested).toLowerCase())) {
+    throw new Error(`load_mode '${requested}' is not supported in the browser build`)
+  }
+  return { ...rest, load_mode: 'none' }
 }
 
 function runJob(handle, data) {
   if (data.length > 0 && Array.isArray(data[0].messages)) {
     return unsupported('Batch inference')
   }
+  if (data.some((message) => message.type === 'media')) {
+    return unsupported('Media input')
+  }
   const id = handle.nextJobId++
   const job = { cancelled: false, ended: false }
   handle.jobs.set(id, job)
   handle.active++
-  const messages = JSON.stringify(data.map(toNativeMessage))
+  const messages = JSON.stringify(data)
   // The caller registers its output sink for `id` only after this admission
   // promise settles, so the job starts on a later task: the engine can emit
   // its first token before yielding (always so on CPU).
@@ -200,13 +212,15 @@ function cancel(handle) {
   return Promise.resolve()
 }
 
+// Queued behind any running job, so that job still delivers its own terminal
+// event (stats with a cancelled stop reason) before the instance goes away.
 function destroyInstance(handle) {
   cancel(handle)
   const native = handle.native
-  instances.delete(native)
   handle.native = 0
   const mounts = handle.mounts.splice(0)
   enqueue(async () => {
+    instances.delete(native)
     if (native) await call('qvac_web_destroy', ['number'], [native])
     const module = await loadModule()
     for (const mountpoint of mounts) module.FS.unmount(mountpoint)
