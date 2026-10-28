@@ -482,6 +482,37 @@ safeTest(
   }
 )
 
+safeTest(
+  'baseCacheKey without a cacheKey starts from the primed file and writes nothing',
+  { timeout: 600_000 },
+  async (t) => {
+    const primer = await setupModel(t, { n_predict: '256', ctx_size: '4096' })
+    const base = path.join(primer.dirPath, 'cache-base-keyless.bin')
+    cleanupIntegrationCacheFiles(base)
+    t.teardown(() => cleanupIntegrationCacheFiles(base))
+    await runAndCollectStats(primer.model, buildPrompt(), cacheOpts(base, { prefill: true }))
+    await primer.model.saveCache(base)
+    await primer.model.unload()
+    const primedBytes = fs.readFileSync(base)
+    const listCacheFiles = () =>
+      fs
+        .readdirSync(primer.dirPath)
+        .filter((name) => name.endsWith('.bin'))
+        .sort()
+    const filesBefore = listCacheFiles()
+
+    const { model } = await setupModel(t, { n_predict: '256', ctx_size: '4096' })
+    const stats = await runAndCollectStats(model, buildPrompt(), { baseCacheKey: base })
+    t.ok(
+      reusedTokens(stats) > 0,
+      `the keyless request reused ${reusedTokens(stats)} tokens of its baseCacheKey`
+    )
+    await model.unload()
+    t.ok(fs.readFileSync(base).equals(primedBytes), 'the base file is unchanged')
+    t.alike(listCacheFiles(), filesBefore, 'the keyless request wrote no cache file')
+  }
+)
+
 safeTest('Single-shot inferences reuse the prefix they share', { timeout: 600_000 }, async (t) => {
   const { model } = await setupModel(t, { n_predict: '256', ctx_size: '4096' })
 
