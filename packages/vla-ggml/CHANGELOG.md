@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Breaking
+
+- `load({ backend })` with a GPU family list no longer falls back to CPU. When
+  no usable GPU matches, the backend fails to init, or the weights do not fit
+  on the device, `load()` rejects with `FAILED_TO_LOAD_WEIGHTS`. On Jetson
+  Orin 8GB a failed 3.7 GB `cudaMalloc` used to leave `backend: 'cuda'`
+  running on CPU at 50x the latency with only a log line to show for it.
+  `'auto'` keeps the CPU fallback, and so does a list that names it, such as
+  `'cuda,auto'`.
+
 ### Changed
 
 - π₀.₅ `run()` takes 1 to `hparams.numCameras` images instead of exactly
@@ -9,12 +19,6 @@
   `lerobot/pi05_libero_finetuned_v044` with its `empty_camera_0` third view,
   run by passing only the real views. The native loader already accepted the
   range; only the JS validator rejected it.
-- `load({ backend })` with a GPU family list no longer falls back to CPU. When
-  no usable GPU matches, the backend fails to init, or the weights do not fit
-  on the device, `load()` rejects with `FAILED_TO_LOAD_WEIGHTS`. On Jetson
-  Orin 8GB a failed 3.7 GB `cudaMalloc` used to leave `backend: 'cuda'`
-  running on CPU at 50x the latency with only a log line to show for it.
-  `'auto'` keeps the CPU fallback.
 
 ### Fixed
 

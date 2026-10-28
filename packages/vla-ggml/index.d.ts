@@ -148,7 +148,8 @@ declare namespace VlaModel {
      *   of them has a device on this machine. Accepted family names are cuda,
      *   vulkan, metal, opencl, hip, rocm and sycl; an unrecognised name is an
      *   error. A family whose device the Adreno gate rejected stays rejected.
-     *   Unlike `"auto"`, a list never ends on CPU: no usable GPU, a backend
+     *   Unlike `"auto"`, a list never ends on CPU unless it also names
+     *   `auto`, as in `"cuda,auto"`: no usable GPU, a backend
      *   that fails to init, or a weight allocation that fails on the device
      *   rejects `load()` with `FAILED_TO_LOAD_WEIGHTS`. Check `backendName`
      *   after `load()` for the device that was picked.

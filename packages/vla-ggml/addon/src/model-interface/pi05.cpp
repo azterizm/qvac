@@ -1114,8 +1114,9 @@ static std::unique_ptr<Pi05ModelInternal> pi05LoadModel(
   // CPU after one looks like success at 50x the latency (Jetson Orin 8GB,
   // weight cudaMalloc failed with NvMap error 12 and warmup went from 1 s to
   // 50 s per chunk), so every CPU fallback below throws instead when the
-  // caller named a backend. 'auto' keeps the fallback.
-  const bool strictGpu = !backendOverride.empty();
+  // caller named a backend. 'auto', alone or in the list, keeps the fallback.
+  const bool strictGpu =
+      vla_backend_selection::backendOverrideIsStrict(backendOverride);
   const std::string overrideText =
       vla_backend_selection::describeBackendOverride(backendOverride);
   if (!forceCpu) {

@@ -20,6 +20,19 @@ namespace vla_backend_selection {
 // is accepted and dropped, so it contributes no preference.
 std::vector<std::string> parseBackendOverride(const std::string& backendStr);
 
+// Trailing marker parseBackendRequest appends when the list also named 'auto'.
+inline constexpr std::string_view K_AUTO_FALLBACK = "auto";
+
+// parseBackendOverride, plus K_AUTO_FALLBACK at the end when the list named
+// 'auto' next to a GPU family, "auto,cuda" -> {"cuda", "auto"}. The loaders
+// read the marker through backendOverrideIsStrict: a list with 'auto' in it
+// keeps the CPU fallback, a list without it never ends on CPU.
+std::vector<std::string> parseBackendRequest(const std::string& backendStr);
+
+// True when the caller named GPU families and no 'auto', so the loaders must
+// throw rather than fall back to CPU.
+bool backendOverrideIsStrict(const std::vector<std::string>& backendOverride);
+
 // Extract the Adreno model number from a device description string.
 // Returns 0 for non-Adreno devices.
 //

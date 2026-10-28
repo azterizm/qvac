@@ -110,6 +110,40 @@ std::vector<std::string> parseBackendOverride(const std::string& backendStr) {
   return families;
 }
 
+std::vector<std::string> parseBackendRequest(const std::string& backendStr) {
+  std::vector<std::string> families = parseBackendOverride(backendStr);
+  if (families.empty()) {
+    return families;
+  }
+  size_t start = 0;
+  while (start <= backendStr.size()) {
+    size_t comma = backendStr.find(',', start);
+    if (comma == std::string::npos) {
+      comma = backendStr.size();
+    }
+    const std::string token = backendStr.substr(start, comma - start);
+    const auto begin = token.find_first_not_of(K_BACKEND_TRIM);
+    if (begin != std::string::npos) {
+      const auto end = token.find_last_not_of(K_BACKEND_TRIM);
+      std::string family = token.substr(begin, end - begin + 1);
+      std::transform(
+          family.begin(), family.end(), family.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+          });
+      if (family == K_AUTO_FALLBACK) {
+        families.emplace_back(K_AUTO_FALLBACK);
+        break;
+      }
+    }
+    start = comma + 1;
+  }
+  return families;
+}
+
+bool backendOverrideIsStrict(const std::vector<std::string>& backendOverride) {
+  return !backendOverride.empty() && backendOverride.back() != K_AUTO_FALLBACK;
+}
+
 void loadBackendsOnce(const std::string& backendsDir) {
   static std::once_flag sFlag;
   std::call_once(sFlag, [&backendsDir]() {
@@ -301,6 +335,9 @@ ggml_backend_dev_t pickBestGpuDevice(
   // device the gate rejected.
   if (!backendOverride.empty()) {
     for (const std::string& family : backendOverride) {
+      if (family == K_AUTO_FALLBACK) {
+        continue;
+      }
       for (const auto& [backendLower, dev] : accepted) {
         if (backendNameMatchesFamily(backendLower, family)) {
           QLOG_IF(

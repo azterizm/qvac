@@ -849,9 +849,10 @@ static bool initCpuBackend(SmolvlaModel& model) {
 // so older Snapdragon devices fall through to CPU rather than crash on
 // `ggml_backend_dev_init`. `force_cpu=true` skips selection entirely so the
 // integration test can run the same hardware both ways.
-// Returns false only when the caller named a backend (`backendOverride`
-// non-empty) and no GPU came up: a named backend never lands on CPU silently,
-// same rule as pi05LoadModel. With 'auto' a missing GPU is the normal CPU path.
+// Returns false only when the caller named a backend without 'auto'
+// (backendOverrideIsStrict) and no GPU came up: a named backend never lands
+// on CPU silently, same rule as pi05LoadModel. With 'auto' a missing GPU is
+// the normal CPU path.
 static bool tryInitGpuBackend(
     SmolvlaModel& model, bool forceCpu,
     const std::vector<std::string>& backendOverride) {
@@ -861,7 +862,8 @@ static bool tryInitGpuBackend(
         "smolvla_load_model: force_cpu=true — skipping GPU selection");
     return true;
   }
-  const bool strictGpu = !backendOverride.empty();
+  const bool strictGpu =
+      vla_backend_selection::backendOverrideIsStrict(backendOverride);
   const std::string overrideText =
       vla_backend_selection::describeBackendOverride(backendOverride);
   ggml_backend_dev_t gpu =

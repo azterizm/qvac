@@ -218,7 +218,8 @@ rejected. The Adreno rules above still apply, so an override can never
 resurrect a device they rejected. Setting `CUDA_VISIBLE_DEVICES=-1` in the
 environment is an equivalent way to force Vulkan without touching the config.
 
-A GPU list never ends on CPU, unlike `'auto'`. If no usable GPU matches, the
+A GPU list never ends on CPU, unlike `'auto'`, unless it also names `auto`,
+as in `'cuda,auto'`. If no usable GPU matches, the
 backend fails to init, or the weights do not fit on the device (Jetson Orin
 8GB, `cudaMalloc` of the 3.7 GB weight buffer fails with NvMap error 12),
 `load()` rejects with `FAILED_TO_LOAD_WEIGHTS` instead of running on CPU at

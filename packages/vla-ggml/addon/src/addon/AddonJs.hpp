@@ -315,7 +315,7 @@ inline js_value_t* createInstance(js_env_t* env, js_callback_info_t* info) try {
   const bool noPreference = forceCpu || backend.empty() || backend == "auto";
   const std::vector<std::string> backendOverride =
       noPreference ? std::vector<std::string>{}
-                   : vla_backend_selection::parseBackendOverride(backend);
+                   : vla_backend_selection::parseBackendRequest(backend);
 
   auto model = std::make_unique<VlaModel>(
       ggufPath, forceCpu, backendsDir, embodiment, backendOverride);

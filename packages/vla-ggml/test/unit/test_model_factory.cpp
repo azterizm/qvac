@@ -197,9 +197,10 @@ TEST(VlaModelFactory, RejectsUnknownArchitecture) {
 // ─── Backend override never lands on CPU ────────────────────────────────────
 
 // Backend selection runs before any of the three loaders reads the GGUF, so a
-// metadata-only file is enough to see which error comes first. On a host with
-// no device for the named family the loader must refuse with "matched no
-// usable GPU device" instead of quietly taking the CPU path and failing later
+// metadata-only file is enough to see which error comes first. An override
+// that matches no family falls back to the default GPU order, so only a host
+// with no usable GPU at all must refuse with "matched no usable GPU device"
+// instead of quietly taking the CPU path and failing later
 // on a missing tensor. On a host that does have a GPU, selection succeeds and
 // that message must be absent; what follows is either the missing-tensor
 // error or, for a loader that allocates device buffers before it checks the
@@ -273,4 +274,41 @@ TEST(VlaModelFactory, DescribeOverrideJoinsFamiliesWithCommas) {
   EXPECT_EQ(describeBackendOverride({}), "");
   EXPECT_EQ(describeBackendOverride({"cuda"}), "cuda");
   EXPECT_EQ(describeBackendOverride({"cuda", "vulkan"}), "cuda,vulkan");
+}
+
+TEST(VlaModelFactory, AutoInBackendListKeepsCpuFallback) {
+  // 'cuda,auto' asks for CUDA first and allows the default order after it,
+  // CPU included, so no loader may refuse it for lack of a GPU.
+  const std::vector<std::string> override =
+      vla_backend_selection::parseBackendRequest("cuda,auto");
+  for (const char* arch : {"pi05", "groot", "smolvla"}) {
+    const std::string path = writeTempGguf(arch);
+    ASSERT_FALSE(path.empty());
+    try {
+      (void)createVlaModelFromGguf(
+          path, /*forceCpu=*/false, /*backendsDir=*/"", {}, override);
+      FAIL() << arch << ": load should have thrown (no tensors)";
+    } catch (const std::runtime_error& e) {
+      const std::string what = e.what();
+      EXPECT_EQ(what.find("backend override"), std::string::npos)
+          << arch << ": " << what;
+    }
+    cleanupTempFile(path);
+  }
+}
+
+TEST(VlaModelFactory, ParseBackendRequestMarksAuto) {
+  using vla_backend_selection::backendOverrideIsStrict;
+  using vla_backend_selection::parseBackendRequest;
+  EXPECT_EQ(parseBackendRequest("cuda"), (std::vector<std::string>{"cuda"}));
+  EXPECT_EQ(
+      parseBackendRequest("auto,cuda"),
+      (std::vector<std::string>{"cuda", "auto"}));
+  EXPECT_EQ(
+      parseBackendRequest(" CUDA , Auto ,vulkan"),
+      (std::vector<std::string>{"cuda", "vulkan", "auto"}));
+  EXPECT_TRUE(parseBackendRequest("auto").empty());
+  EXPECT_TRUE(backendOverrideIsStrict(parseBackendRequest("cuda,vulkan")));
+  EXPECT_FALSE(backendOverrideIsStrict(parseBackendRequest("cuda,auto")));
+  EXPECT_FALSE(backendOverrideIsStrict({}));
 }

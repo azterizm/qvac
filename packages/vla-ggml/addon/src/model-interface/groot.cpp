@@ -1423,7 +1423,8 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   m->has_gpu = false;
 
   // Same rule as pi05LoadModel: a named backend never lands on CPU silently.
-  const bool strictGpu = !backendOverride.empty();
+  const bool strictGpu =
+      vla_backend_selection::backendOverrideIsStrict(backendOverride);
   const std::string overrideText =
       vla_backend_selection::describeBackendOverride(backendOverride);
   if (!forceCpu) {
