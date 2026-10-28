@@ -109,6 +109,18 @@ export const RESOURCE_TABLE: ResourceTable = {
     config: { ctx_size: 4096, tools: true }
   },
 
+  'prefill-llm': {
+    constant: { $const: 'QWEN3_5_0_8B_MULTIMODAL_Q4_K_M' },
+    type: 'llamacpp-completion',
+    config: { ctx_size: 4096, tools: true, parallel: 1 }
+  },
+
+  'prefill-llm-parallel': {
+    constant: { $const: 'QWEN3_5_0_8B_MULTIMODAL_Q4_K_M' },
+    type: 'llamacpp-completion',
+    config: { ctx_size: 4096, tools: true, parallel: 2 }
+  },
+
   'tools-qwen35': {
     on: ['desktop', 'electron', 'snap'],
     constant: { $const: 'QWEN3_5_0_8B_MULTIMODAL_Q4_K_M' },
@@ -469,6 +481,31 @@ export const RESOURCE_TABLE: ResourceTable = {
     config: {}
   },
 
+  'parakeet-transcribepsy': {
+    constant: { $const: 'PARAKEET_TRANSCRIBEPSY_250M_Q8_0' },
+    type: 'parakeet-transcription',
+    config: {}
+  },
+
+  // The same GGUF with explicit 15 s long-form windows (188 encoder frames) and
+  // 1.28 s of context on each side, so a fixture longer than one window is
+  // encoded in pieces and stitched back together.
+  'parakeet-transcribepsy-windowed': {
+    constant: { $const: 'PARAKEET_TRANSCRIBEPSY_250M_Q8_0' },
+    type: 'parakeet-transcription',
+    config: { longFormWindowFrames: 188, longFormContextFrames: 16 }
+  },
+
+  // The Core ML distribution: an encoder-less GGUF whose encoder and decoder
+  // bundles the loader stages beside it on macOS and iOS. Anywhere else the
+  // load is refused, so the key exists only where it can load.
+  'parakeet-transcribepsy-coreml': {
+    on: ['desktop-macos', 'electron-macos', 'mobile-ios'],
+    constant: { $const: 'PARAKEET_TRANSCRIBEPSY_250M_COREML_Q8_0' },
+    type: 'parakeet-transcription',
+    config: {}
+  },
+
   bci: {
     // Defined on every leg: `model-fit-bci` assesses the load without running it. Mobile
     // never loads it, so it must not pay for the weights.
@@ -592,6 +629,22 @@ export const RESOURCE_TABLE: ResourceTable = {
       threads: 4,
       prediction: 'v',
       params_backend: 'vae=cpu',
+      upscaler: {
+        type: 'esrgan',
+        model_src: { $const: 'REALESRGAN_X4PLUS_ANIME_6B' },
+        tile_size: 128
+      }
+    }
+  },
+
+  'diffusion-esrgan-fit-probe': {
+    on: ['desktop'],
+    constant: { $const: 'SD_V2_1_1B_Q8_0' },
+    type: 'sdcpp-generation',
+    config: {
+      device: 'gpu',
+      threads: 4,
+      prediction: 'v',
       upscaler: {
         type: 'esrgan',
         model_src: { $const: 'REALESRGAN_X4PLUS_ANIME_6B' },
