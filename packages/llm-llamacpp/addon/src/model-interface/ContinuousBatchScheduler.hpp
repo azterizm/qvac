@@ -293,7 +293,7 @@ using DriverFactory = std::function<std::unique_ptr<SequenceDriver>(
 /// more of its prompt than its own sequence (`cache::CacheSourceProvider`):
 /// other parked sequences, the RAM tier and the cacheKey files the model has
 /// used.
-class ContinuousBatchScheduler : public cache::CacheSourceProvider {
+class ContinuousBatchScheduler {
 public:
   /// @param shared             Live llama handles. Must outlive `*this`.
   /// @param maxChunkSize       Tokens fed per slot per step (typically
@@ -426,13 +426,6 @@ public:
   /// cacheKey files the model has used, shared with the single-prompt path.
   /// Every key a request names is noted in it.
   void setFileIndex(std::shared_ptr<cache::CacheFileIndex> fileIndex);
-
-  /// Called by the driver being admitted, under the scheduler lock, from its
-  /// `preparePrefill`. A parked sequence lends its cells (`seq_cp`), the RAM
-  /// tier and the files a copy; none of them changes.
-  bool offerDonor(
-      llama_seq_id seqId, const cache::Ledger& prompt, bool trimmable,
-      size_t minimum, const cache::DonorAdopter& adopt) override;
 
   /// Writes every parked, non-ephemeral conversation with unsaved turns to
   /// its `cacheKey` file. Run when the model is reloaded or unloaded; skipped
@@ -738,12 +731,12 @@ private:
   /// Free sequence for a request on `cacheKey`: the one parked with that key,
   /// else one with nothing parked, else the least recently used parked one
   /// (anonymous ones first), evicted first. Nullopt when every sequence is
-  /// busy. An evicted conversation's cells stay in the sequence when
-  /// `keepEvicted` is set, and its ledger words are returned there, so the
-  /// request can reuse the prefix it shares with them.
+  /// busy. An evicted conversation's cells stay in the sequence and its
+  /// ledger words are returned in `evicted`, so the request can reuse the
+  /// prefix it shares with them.
   [[nodiscard]] std::optional<uint32_t> chooseSeqIdLocked(
       const std::string& cacheKey,
-      std::optional<std::vector<llama_token>>* keepEvicted = nullptr);
+      std::optional<std::vector<llama_token>>& evicted);
   /// Moves the conversation parked on `seqId` to the RAM tier or its file
   /// (see `evictParked`) and clears the sequence, unless `keepCells` is set:
   /// the cells then stay, and the ledger words describing them are returned.
@@ -752,6 +745,13 @@ private:
   /// Neither the batcher nor the scheduler holds a request on `seqId` (see
   /// the note in `submitLocked` on the drain window).
   [[nodiscard]] bool isFreeLocked(uint32_t seqId) const;
+  /// The `cache::CacheSourceProvider` of the driver admitted on `seqId`,
+  /// called from its `preparePrefill` under the scheduler lock. A parked
+  /// sequence lends its cells (`seq_cp`), the RAM tier and the files a copy;
+  /// none of them changes.
+  bool offerDonorLocked(
+      llama_seq_id seqId, const cache::Ledger& prompt, bool trimmable,
+      size_t minimum, const cache::DonorAdopter& adopt);
   /// Writes the live state of `seqId`, described by `ledgerWords`, to
   /// `cacheKey` through a temp file, followed by the newest of the
   /// conversation's `checkpoints` (see `cache::appendCheckpointSection`).

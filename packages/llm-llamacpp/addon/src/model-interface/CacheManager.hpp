@@ -10,7 +10,6 @@
 
 #include <llama.h>
 
-#include "CacheSourceSelection.hpp"
 #include "LlmContext.hpp"
 #include "MediaLoadOrder.hpp"
 #include "common/chat.h"
@@ -41,12 +40,14 @@ class CacheFileIndex;
 /// The single-prompt cache session. It is also where the context looks for a
 /// state that serves more of a prompt than its own sequence: the RAM tier
 /// and the cacheKey files this model has used.
-class CacheManager
-    : public qvac_lib_inference_addon_llama::cache::CacheSourceProvider {
+class CacheManager {
 public:
   CacheManager(
       LlmContext* llmContext, std::function<void(bool)> resetStateCallback);
-  ~CacheManager() override;
+  ~CacheManager();
+  // The context's cache source provider points back here.
+  CacheManager(const CacheManager&) = delete;
+  CacheManager& operator=(const CacheManager&) = delete;
 
   bool handleCache(
       ParsedPromptPayload& parsedPrompt, const std::string& inputPrompt,
@@ -81,13 +82,6 @@ public:
   void setFileIndex(
       std::shared_ptr<qvac_lib_inference_addon_llama::cache::CacheFileIndex>
           fileIndex);
-
-  bool offerDonor(
-      llama_seq_id seqId,
-      const qvac_lib_inference_addon_llama::cache::Ledger& prompt,
-      bool trimmable, size_t minimum,
-      const qvac_lib_inference_addon_llama::cache::DonorAdopter& adopt)
-      override;
 
   /// Writes the active conversation to its file if it has unsaved turns and
   /// is not ephemeral. Run when the model is reloaded or unloaded.
@@ -125,7 +119,6 @@ private:
   /// is.
   bool copyActiveCacheToRamTier(
       const std::string& key, bool dirty, bool savedToDisk, bool ephemeral);
-  bool moveActiveCacheToRamTier();
   /// Restores `sessionPath_` from `entry`, already taken from the RAM tier;
   /// false when there is none or it is not usable.
   bool restoreFromRamTier(

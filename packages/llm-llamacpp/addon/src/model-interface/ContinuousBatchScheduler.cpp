@@ -1,7 +1,6 @@
 #include "ContinuousBatchScheduler.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
@@ -469,7 +468,7 @@ uint32_t ContinuousBatchScheduler::submitLocked(QueuedRequest&& queued) {
   // A conversation evicted to make room leaves its cells in the sequence:
   // the request may share a prefix with it.
   std::optional<std::vector<llama_token>> evicted;
-  const auto maybeSeqId = chooseSeqIdLocked(request.cacheKey, &evicted);
+  const auto maybeSeqId = chooseSeqIdLocked(request.cacheKey, evicted);
   if (!maybeSeqId.has_value()) {
     throw qvac_errors::StatusError(
         ADDON_ID,
@@ -640,9 +639,16 @@ uint32_t ContinuousBatchScheduler::submitLocked(QueuedRequest&& queued) {
   driver->setRenderOverrides(renderOverridesFrom(request.overrides));
 
   // Donors are offered under this lock, during `preparePrefill` only.
-  driver->setCacheSourceProvider(this);
+  driver->setCacheSourceProvider(
+      [this, seqId = static_cast<llama_seq_id>(seqId)](
+          const cache::Ledger& prompt,
+          bool trimmable,
+          size_t minimum,
+          const cache::DonorAdopter& adopt) {
+        return offerDonorLocked(seqId, prompt, trimmable, minimum, adopt);
+      });
   ScopeGuard providerGuard(
-      [&driver]() noexcept { driver->setCacheSourceProvider(nullptr); });
+      [&driver]() noexcept { driver->setCacheSourceProvider({}); });
   PrefillPlan plan = driver->preparePrefill(
       request.chatMsgs,
       request.tools,
@@ -651,7 +657,7 @@ uint32_t ContinuousBatchScheduler::submitLocked(QueuedRequest&& queued) {
       isCacheLoaded,
       request.prefill);
   providerGuard.dismiss();
-  driver->setCacheSourceProvider(nullptr);
+  driver->setCacheSourceProvider({});
 
   // Anchored post-`preparePrefill` so the cursor reflects any position
   // change preparation made. `TextLlmContext::evalMessageWithTools`
@@ -1919,13 +1925,13 @@ void ContinuousBatchScheduler::setFileIndex(
   fileIndex_ = std::move(fileIndex);
 }
 
-bool ContinuousBatchScheduler::offerDonor(
+bool ContinuousBatchScheduler::offerDonorLocked(
     llama_seq_id seqId, const cache::Ledger& prompt, bool trimmable,
     size_t minimum, const cache::DonorAdopter& adopt) {
-  // Parked sequences first: their cells are copied without leaving the
-  // device.
+  // Another parked sequence wins a tie: its cells are copied without leaving
+  // the device.
   std::optional<uint32_t> parkedDonor;
-  size_t inParked = 0;
+  size_t inParked = minimum;
   for (uint32_t donor = 0; donor < parked_.size(); ++donor) {
     const auto& parked = parked_[donor];
     if (static_cast<llama_seq_id>(donor) == seqId || !parked.has_value() ||
@@ -1947,36 +1953,15 @@ bool ContinuousBatchScheduler::offerDonor(
       continue;
     }
   }
-  const size_t inRam = ramTier_ && ramTier_->enabled()
-                           ? ramTier_->longestPrefix(prompt, trimmable)
-                           : 0;
-  const std::optional<cache::CacheFileIndex::Match> inFile =
-      fileIndex_ ? fileIndex_->longestPrefix(prompt, trimmable, "")
-                 : std::nullopt;
-  const std::array<size_t, 3> reusable{
-      inParked, inRam, inFile.has_value() ? inFile->reusable : 0};
-  const std::optional<size_t> best = cache::longestReusable(reusable, minimum);
-  bool adopted = false;
-  if (!best.has_value()) {
-    return false;
-  }
-  if (*best == 0) {
+  bool adopted = cache::offerStoredState(
+      ramTier_.get(), fileIndex_.get(), "", prompt, trimmable, inParked, adopt);
+  if (!adopted && parkedDonor.has_value()) {
     const ParkedState& parked = *parked_[*parkedDonor];
     adopted = adopt(
         cache::sequenceDonor(
             static_cast<llama_seq_id>(*parkedDonor),
             parked.ledgerWords,
             parked.checkpoints));
-  } else if (*best == 1) {
-    adopted = ramTier_->useLongestPrefix(
-        prompt, trimmable, minimum, [&adopt](const SlotStateCacheEntry& entry) {
-          return adopt(cache::ramTierDonor(entry));
-        });
-  } else {
-    adopted = fileIndex_->use(
-        inFile->path, [&adopt, &inFile](const std::vector<llama_token>& words) {
-          return adopt(cache::fileDonor(inFile->path, words));
-        });
   }
   if (adopted) {
     ++donorHits_;
@@ -2067,7 +2052,7 @@ bool ContinuousBatchScheduler::isFreeLocked(uint32_t seqId) const {
 
 std::optional<uint32_t> ContinuousBatchScheduler::chooseSeqIdLocked(
     const std::string& cacheKey,
-    std::optional<std::vector<llama_token>>* keepEvicted) {
+    std::optional<std::vector<llama_token>>& evicted) {
   const auto isFree = [this](uint32_t seqId) { return isFreeLocked(seqId); };
   const auto nSeq = static_cast<uint32_t>(slots_.size());
   if (!cacheKey.empty()) {
@@ -2101,10 +2086,7 @@ std::optional<uint32_t> ContinuousBatchScheduler::chooseSeqIdLocked(
     }
   }
   if (oldest.has_value()) {
-    auto words = evictParkedLocked(*oldest, keepEvicted != nullptr);
-    if (keepEvicted != nullptr) {
-      *keepEvicted = std::move(words);
-    }
+    evicted = evictParkedLocked(*oldest, /*keepCells=*/true);
   }
   return oldest;
 }

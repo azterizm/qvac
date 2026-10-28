@@ -428,30 +428,24 @@ TEST_F(CacheFileIndexTest, FindsTheNotedFileWithTheLongestPrefix) {
   (void)unnoted;
 }
 
-// A rewritten file is read again, a deleted one stops being a candidate, and
-// its words are handed out only while the file is still the one read.
+// A rewritten file is read again and a deleted one stops being a candidate;
+// a match carries the ledger words it was read with.
 TEST_F(CacheFileIndexTest, FollowsRewrittenAndDeletedFiles) {
   cache::CacheFileIndex index;
   const std::string path = write("conversation.bin", {1, 2, 3});
   index.note(path);
   const cache::Ledger prompt = cache::fromTokens({1, 2, 3, 4, 5});
-  ASSERT_EQ(index.longestPrefix(prompt, true, "")->reusable, 3u);
-
-  std::vector<llama_token> lent;
-  EXPECT_TRUE(index.use(path, [&](const std::vector<llama_token>& words) {
-    lent = words;
-    return true;
-  }));
-  EXPECT_EQ(cache::deserialize(lent.data(), lent.size()).nPast, 3);
+  auto match = index.longestPrefix(prompt, true, "");
+  ASSERT_TRUE(match.has_value());
+  EXPECT_EQ(match->reusable, 3u);
+  EXPECT_EQ(
+      cache::deserialize(match->words.data(), match->words.size()).nPast, 3);
 
   (void)write("conversation.bin", {1, 2, 3, 4, 9, 9});
-  EXPECT_FALSE(index.use(path, [](const auto&) { return true; }))
-      << "the file changed since it was read";
   ASSERT_EQ(index.longestPrefix(prompt, true, "")->reusable, 4u);
 
   fs::remove(path);
   EXPECT_FALSE(index.longestPrefix(prompt, true, "").has_value());
-  EXPECT_FALSE(index.use(path, [](const auto&) { return true; }));
 }
 
 // Files in another format share nothing, and the index stays bounded.

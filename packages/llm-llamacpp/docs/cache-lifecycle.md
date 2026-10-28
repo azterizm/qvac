@@ -189,57 +189,33 @@ prompt are deleted.
 
 ## Starting from another conversation
 
-A request is not limited to the state of its own `cacheKey`. On text models,
-once its prompt is rendered and tokenized and before it is reconciled, the
-addon looks for the state that serves the most of it, wherever that state is
-kept:
+On text models a request is not limited to its own `cacheKey`'s state. After
+its prompt is tokenized and before it is reconciled, it starts from whichever
+state serves the longest prefix of it, cheapest first on a tie:
 
-1. the request's own sequence: its key's conversation, or what the previous
-   occupant left there (a conversation set aside by a key switch, a request
-   without a key, a conversation evicted from the slot);
-2. on the batch path, the conversation parked in any other free slot;
+1. its own sequence: its key's conversation, or what the previous occupant
+   left there (a conversation set aside by a key switch or evicted from the
+   slot, or a request without a key);
+2. on the batch path, the conversation parked in another free slot;
 3. the RAM tier (`cache_ram_mib`);
-4. the `cacheKey` files this model has used in this process.
+4. the `cacheKey` files a request or `saveCache()` named in this process (no
+   directory is scanned; a changed file is read again, a deleted one skipped).
 
-A state serves the prefix it shares with the prompt where its memory can be
-trimmed there. On a full-state model, and for another conversation's state on
-a sliding-window model (its window cannot be checked before it is copied), a
-state serves only when it is a prefix of the prompt, or else as far as its
-longest checkpoint within the shared prefix. The longest wins; on a tie the
-earlier source above wins, the one cheapest to bring in. Any shared prefix
-longer than what the request's own sequence serves is used: there is no
-threshold.
+Any prefix longer than what its own sequence serves is used; there is no
+threshold. Memory that cannot be trimmed (full-state models, and another
+conversation's sliding window) serves only a state that is a prefix of the
+prompt, or its longest checkpoint within the shared prefix; in practice, a
+system prompt and tools primed with `prefill` serve every conversation that
+starts with them.
 
-The winner is copied into the request's sequence, and the conversation it
-belongs to does not change: a parked slot shares or copies its cells
-(`llama_memory_seq_cp`, as llama-server's `server_slot::copy_state_to` does;
-on hybrid models the recurrent state is copied when the new sequence first
-decodes), a RAM-tier entry is restored from its bytes and stays in the tier,
-and a file is loaded and stays as it was. The request is then reconciled as
-above, so a longer copy is trimmed, or cut back to its checkpoint, to the
-shared prefix. This is llama-server's slot selection by prompt similarity
-(`--slot-prompt-similarity`) and its host-memory prompt cache (`--cache-ram`),
-with any shared prefix taken and the source left where it is.
-
-- **The copy belongs to the request.** Its state is its own key's (or
-  anonymous): the first write of its key writes the whole state to its own
-  file. A request that fails rolls back like any other.
-- **Requests without a key** keep their state in memory: in sequence 0 on the
-  single-prompt path until the next request replaces it (copied into the RAM
-  tier, never to be written, when the next key loads a state of its own), and
-  parked anonymously on the batch path. It is never written to a file, and
-  `saveCache` cannot name it.
-- **Files** are candidates once a request or `saveCache()` named their key in
-  this process; the addon does not scan directories. A file is read again when
-  it changes, and a missing or deleted one is skipped. The lookup does not use
-  the checkpoint a file carries, so on a full-state model a file serves only
-  when its whole state is a prefix of the prompt.
-- **Full-state models** take checkpoints at the end of each history, which
-  rarely falls inside the prefix two different conversations share. In
-  practice another conversation serves them when it is a prefix of the new
-  prompt: a system prompt and tools primed with `prefill` serve every new
-  conversation that starts with them.
-- **Multimodal models** keep a key's state to that key for now.
+The source is copied and never changes: a parked slot with
+`llama_memory_seq_cp`, as llama-server's `copy_state_to` does, a RAM-tier
+entry from its bytes, a file by loading it. The copy then belongs to the
+request, which reconciles it as above and writes it only to its own key's
+file. This is llama-server's `--slot-prompt-similarity` and `--cache-ram`,
+with any shared prefix taken. A request without a key keeps its state in
+memory the same way, never written to a file. Multimodal models keep a key's
+state to that key for now.
 
 **Cost.** Decoding is paid once per token, because the shared prefix is
 reused. Rendering and tokenizing are not: every cached turn renders and

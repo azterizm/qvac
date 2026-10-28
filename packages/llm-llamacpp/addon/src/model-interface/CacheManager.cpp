@@ -1,6 +1,5 @@
 #include "CacheManager.hpp"
 
-#include <array>
 #include <filesystem>
 #include <system_error>
 
@@ -30,13 +29,27 @@ CacheManager::CacheManager(
     : llmContext_(llmContext),
       resetStateCallback_(std::move(resetStateCallback)) {
   if (llmContext_ != nullptr) {
-    llmContext_->setCacheSourceProvider(this);
+    // The active key's own file was loaded already, or there is none.
+    llmContext_->setCacheSourceProvider([this](
+                                            const cache::Ledger& prompt,
+                                            bool trimmable,
+                                            size_t minimum,
+                                            const cache::DonorAdopter& adopt) {
+      return cache::offerStoredState(
+          ramTier_.get(),
+          fileIndex_.get(),
+          sessionPath_,
+          prompt,
+          trimmable,
+          minimum,
+          adopt);
+    });
   }
 }
 
 CacheManager::~CacheManager() {
   if (llmContext_ != nullptr) {
-    llmContext_->setCacheSourceProvider(nullptr);
+    llmContext_->setCacheSourceProvider({});
   }
 }
 
@@ -366,7 +379,11 @@ void CacheManager::saveActiveCacheForTransition() {
   }
   // With the RAM tier on, the conversation moves there and its file is only
   // written when the tier has to let it go or the model is unloaded.
-  if (moveActiveCacheToRamTier()) {
+  if (copyActiveCacheToRamTier(
+          sessionPath_,
+          activeCacheDirty_,
+          activeCacheSavedToDisk_,
+          activeEphemeral_)) {
     setAsideInPlace();
     return;
   }
@@ -404,14 +421,6 @@ void CacheManager::setAsideInPlace() {
   } else {
     resetStateCallback_(true);
   }
-}
-
-bool CacheManager::moveActiveCacheToRamTier() {
-  return copyActiveCacheToRamTier(
-      sessionPath_,
-      activeCacheDirty_,
-      activeCacheSavedToDisk_,
-      activeEphemeral_);
 }
 
 bool CacheManager::copyActiveCacheToRamTier(
@@ -565,38 +574,6 @@ void CacheManager::discard(const std::string& cacheKey) {
 void CacheManager::setFileIndex(
     std::shared_ptr<cache::CacheFileIndex> fileIndex) {
   fileIndex_ = std::move(fileIndex);
-}
-
-bool CacheManager::offerDonor(
-    llama_seq_id seqId, const cache::Ledger& prompt, bool trimmable,
-    size_t minimum, const cache::DonorAdopter& adopt) {
-  (void)seqId;
-  // The active key's own file was loaded already, or there is none.
-  const size_t inRam = ramTier_ && ramTier_->enabled()
-                           ? ramTier_->longestPrefix(prompt, trimmable)
-                           : 0;
-  const std::optional<cache::CacheFileIndex::Match> inFile =
-      fileIndex_ ? fileIndex_->longestPrefix(prompt, trimmable, sessionPath_)
-                 : std::nullopt;
-  const std::array<size_t, 2> reusable{
-      inRam, inFile.has_value() ? inFile->reusable : 0};
-  const std::optional<size_t> best = cache::longestReusable(reusable, minimum);
-  if (!best.has_value()) {
-    return false;
-  }
-  if (*best == 0) {
-    return ramTier_->useLongestPrefix(
-        prompt,
-        trimmable,
-        minimum,
-        [&adopt](
-            const qvac_lib_inference_addon_llama::batching::SlotStateCacheEntry&
-                entry) { return adopt(cache::ramTierDonor(entry)); });
-  }
-  return fileIndex_->use(
-      inFile->path, [&adopt, &inFile](const std::vector<llama_token>& words) {
-        return adopt(cache::fileDonor(inFile->path, words));
-      });
 }
 
 void CacheManager::setRamTier(

@@ -355,17 +355,6 @@ TEST(CacheSourceSelection, UntrimmableMemoryNeedsAPrefixOrACheckpoint) {
   EXPECT_EQ(cache::reusablePrefix(state, &checkpoints, diverging, false), 2u);
 }
 
-// The longest reusable prefix wins, the earliest (cheapest) one on a tie,
-// and only when it beats what the request already has.
-TEST(CacheSourceSelection, LongestReusableWinsAboveTheMinimum) {
-  const std::vector<size_t> reusable{4, 9, 9, 2};
-  EXPECT_EQ(cache::longestReusable(reusable, 0), std::optional<size_t>(1));
-  EXPECT_EQ(cache::longestReusable(reusable, 8), std::optional<size_t>(1));
-  EXPECT_EQ(cache::longestReusable(reusable, 9), std::nullopt);
-  EXPECT_EQ(cache::longestReusable(std::vector<size_t>{0, 0}, 0), std::nullopt);
-  EXPECT_EQ(cache::longestReusable({}, 0), std::nullopt);
-}
-
 // Another request starts from a copy of a RAM-tier entry: the lookup finds the
 // one that serves the most of its prompt, and every entry stays in the tier.
 TEST(CacheSourceSelection, RamTierLendsItsLongestPrefixWithoutGivingItUp) {
@@ -387,23 +376,25 @@ TEST(CacheSourceSelection, RamTierLendsItsLongestPrefixWithoutGivingItUp) {
   broken.ledgerWords.back() ^= 1;
   ASSERT_TRUE(tier.insert("broken", std::move(broken)));
 
+  // Entries of the entry `useLongestPrefix` lends; 0 when it lends none.
+  const auto lent =
+      [&tier](const cache::Ledger& prompt, bool trimmable, size_t minimum) {
+        size_t entries = 0;
+        (void)tier.useLongestPrefix(
+            prompt, trimmable, minimum, [&](const SlotStateCacheEntry& entry) {
+              entries = cache::deserialize(
+                            entry.ledgerWords.data(), entry.ledgerWords.size())
+                            .ledger.entries.size();
+              return true;
+            });
+        return entries;
+      };
   const cache::Ledger prompt = cache::fromTokens({1, 2, 3, 4, 9});
-  EXPECT_EQ(tier.longestPrefix(prompt, true), 4u);
+  EXPECT_EQ(lent(prompt, true, 0), 5u);
+  EXPECT_EQ(lent(prompt, true, 3), 5u);
   // Without trimming only a state that is a prefix of the prompt serves.
-  EXPECT_EQ(tier.longestPrefix(prompt, false), 2u);
-
-  size_t lentEntries = 0;
-  EXPECT_TRUE(tier.useLongestPrefix(
-      prompt, true, 3, [&](const SlotStateCacheEntry& entry) {
-        lentEntries = cache::deserialize(
-                          entry.ledgerWords.data(), entry.ledgerWords.size())
-                          .ledger.entries.size();
-        return true;
-      }));
-  EXPECT_EQ(lentEntries, 5u);
-  EXPECT_FALSE(tier.useLongestPrefix(
-      prompt, true, 4, [](const SlotStateCacheEntry&) { return true; }))
-      << "nothing serves more than the minimum";
+  EXPECT_EQ(lent(prompt, false, 0), 2u);
+  EXPECT_EQ(lent(prompt, true, 4), 0u) << "nothing serves more than 4";
+  EXPECT_EQ(lent(cache::fromTokens({9}), true, 0), 0u);
   EXPECT_EQ(tier.size(), 4u);
-  EXPECT_EQ(tier.longestPrefix(cache::fromTokens({9}), true), 0u);
 }

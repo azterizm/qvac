@@ -716,7 +716,7 @@ PrefillPlan TextLlmContext::preparePrefill(
 
   std::optional<size_t> checkpointAt;
   if (cacheReconciliationEnabled_) {
-    if (cacheSourceProvider_ != nullptr && sharesCacheAcrossKeys()) {
+    if (cacheSourceProvider_ && sharesCacheAcrossKeys()) {
       adoptBestCacheSource(cache::fromTokens(inputTokens));
     }
     const size_t fullSize = inputTokens.size();
@@ -1489,8 +1489,7 @@ void TextLlmContext::adoptBestCacheSource(const cache::Ledger& prompt) {
   // it is ranked as untrimmable: by its checkpoints, or whole.
   const bool donorTrimmable =
       !needsFullStateSnapshot_ && !slidingWindowCheckpoints_;
-  (void)cacheSourceProvider_->offerDonor(
-      seqId_,
+  (void)cacheSourceProvider_(
       prompt,
       donorTrimmable,
       own,
@@ -1543,17 +1542,8 @@ bool TextLlmContext::adoptDonorState(
   if (shared < residentLedger_.entries.size() &&
       (needsFullStateSnapshot_ ||
        !canTrimSequenceTo(modelCtx_.lctx, residentLedger_.positions(shared)))) {
-    const CacheCheckpoint* best = nullptr;
-    if (donor.checkpoints != nullptr) {
-      for (const CacheCheckpoint& checkpoint : *donor.checkpoints) {
-        const size_t size = checkpoint.ledger.entries.size();
-        if (size <= shared &&
-            cache::commonPrefix(checkpoint.ledger, prompt) == size &&
-            (best == nullptr || size > best->ledger.entries.size())) {
-          best = &checkpoint;
-        }
-      }
-    }
+    const CacheCheckpoint* best =
+        cache::longestCheckpointWithin(donor.checkpoints, prompt, shared);
     if (best == nullptr ||
         !restoreSequenceState(modelCtx_.lctx, seqId_, best->state)) {
       return false;
@@ -2063,26 +2053,11 @@ void TextLlmContext::stop() { stopGeneration_.store(true); }
 void TextLlmContext::resetStopFlag() { stopGeneration_.store(false); }
 
 void TextLlmContext::resetState(bool resetStats) {
-  // Reset the n_past
+  // Also finishes queued backend work before the memory is cleared.
+  resetStateKeepingMemory(resetStats);
   nPast_ = 0;
   clearCacheReconciliationState();
-
-  // Clear UTF-8 buffer when resetting state
-  utf8Buffer_.clear();
-  thinkingForcedOpen_ = false;
-  thinkingForcedOpenText_.clear();
-  requestRollback_.clear();
-  // Finish queued backend work before mutating KV/recurrent memory.
-  llama_synchronize(modelCtx_.lctx);
   clearSequenceMemory(modelCtx_.lctx);
-
-  // Reset performance metrics
-  if (resetStats) {
-    llama_perf_context_reset(modelCtx_.lctx);
-  }
-
-  // Reset sampler if available
-  common_sampler_reset(smpl_.get());
 }
 
 void TextLlmContext::resetStateKeepingMemory(bool resetStats) {

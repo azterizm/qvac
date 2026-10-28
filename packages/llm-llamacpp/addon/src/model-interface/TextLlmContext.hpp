@@ -164,9 +164,9 @@ public:
     return !llama_model_has_encoder(modelCtx_.model);
   }
   void setCacheSourceProvider(
-      qvac_lib_inference_addon_llama::cache::CacheSourceProvider* provider)
+      qvac_lib_inference_addon_llama::cache::CacheSourceProvider provider)
       override {
-    cacheSourceProvider_ = provider;
+    cacheSourceProvider_ = std::move(provider);
   }
   void resetStateKeepingMemory(bool resetStats) override;
   void setCacheCheckpointPolicy(
@@ -506,8 +506,8 @@ private:
   size_t historyCheckpointEntries_ = 0;
   size_t lastCacheReuse_ = 0;
   size_t donorAdoptions_ = 0;
-  qvac_lib_inference_addon_llama::cache::CacheSourceProvider*
-      cacheSourceProvider_ = nullptr;
+  qvac_lib_inference_addon_llama::cache::CacheSourceProvider
+      cacheSourceProvider_;
   size_t fileCheckpointReads_ = 0;
   qvac_lib_inference_addon_llama::cache::CheckpointPolicy
       cacheCheckpointPolicy_;

@@ -236,9 +236,9 @@ public:
 
   /// Where `preparePrefill` looks, after tokenizing the prompt, for a state
   /// kept outside this sequence that serves more of it than the sequence
-  /// does. Null (the default) keeps to the sequence's own state.
+  /// does. None (the default) keeps to the sequence's own state.
   virtual void setCacheSourceProvider(
-      qvac_lib_inference_addon_llama::cache::CacheSourceProvider* provider) {
+      qvac_lib_inference_addon_llama::cache::CacheSourceProvider provider) {
     (void)provider;
   }
 

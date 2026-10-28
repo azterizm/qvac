@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -74,6 +75,34 @@ inline DonorState fileDonor(
       .ledgerWords = &ledgerWords,
       .checkpoints = nullptr,
       .source = "'" + path + "'"};
+}
+
+// Hands `adopt` the RAM-tier entry or the cacheKey file other than
+// `excludedFile` that serves the most of `prompt`, when it serves more than
+// `minimum`; the RAM tier wins a tie, being cheaper to copy from. Either may
+// be null. Returns what `adopt` returned, or false when nothing qualified.
+inline bool offerStoredState(
+    batching::SlotStateCache* ramTier, CacheFileIndex* files,
+    const std::string& excludedFile, const Ledger& prompt, bool trimmable,
+    size_t minimum, const DonorAdopter& adopt) {
+  std::optional<CacheFileIndex::Match> inFile;
+  if (files != nullptr) {
+    inFile = files->longestPrefix(prompt, trimmable, excludedFile);
+  }
+  const size_t fileServes = inFile.has_value() ? inFile->reusable : 0;
+  // The tier takes an entry serving more than the minimum it is given.
+  const size_t ramMinimum = fileServes > minimum ? fileServes - 1 : minimum;
+  if (ramTier != nullptr &&
+      ramTier->useLongestPrefix(
+          prompt,
+          trimmable,
+          ramMinimum,
+          [&adopt](const batching::SlotStateCacheEntry& entry) {
+            return adopt(ramTierDonor(entry));
+          })) {
+    return true;
+  }
+  return fileServes > minimum && adopt(fileDonor(inFile->path, inFile->words));
 }
 
 } // namespace qvac_lib_inference_addon_llama::cache

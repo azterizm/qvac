@@ -4,18 +4,14 @@
 
 ### Changed
 
-- A text request reuses the prompt prefix it shares with any conversation
-  the model holds, not only its own `cacheKey`'s: the state in memory, a
-  conversation parked in another batch slot, the RAM tier
-  (`cache_ram_mib`), or a `cacheKey` file used in this process. The longest
-  shared prefix wins, with no threshold, and the other conversation is
-  copied, never changed. A new chat with the same system prompt and tools as
-  an earlier one decodes only what follows them. Multimodal models keep a
-  key's state to that key.
+- A text request reuses the longest prompt prefix it shares with any
+  conversation the model holds (in memory, in another batch slot, in the RAM
+  tier, or in a `cacheKey` file used in this process), not only its own
+  `cacheKey`'s. The other conversation is copied, never changed. Multimodal
+  models are unchanged.
 - A text request without a `cacheKey` keeps its state in memory for the next
-  request instead of resetting the context: in sequence 0 on `parallel: 1`,
-  parked anonymously in its slot on `parallel >= 2`. It is never written to a
-  file. `CacheTokens` after such a request now reports the tokens kept.
+  request instead of resetting the context; it is never written to a file.
+  `CacheTokens` after such a request reports the tokens kept.
 
 ## [0.65.0] - 2026-10-27
 

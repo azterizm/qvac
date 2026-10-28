@@ -316,7 +316,7 @@ public:
 
   /// See `SequenceDriver::setCacheSourceProvider`.
   virtual void setCacheSourceProvider(
-      qvac_lib_inference_addon_llama::cache::CacheSourceProvider* provider) {
+      qvac_lib_inference_addon_llama::cache::CacheSourceProvider provider) {
     (void)provider;
   }
 

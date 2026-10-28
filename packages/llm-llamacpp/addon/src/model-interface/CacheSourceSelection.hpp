@@ -2,8 +2,6 @@
 
 #include <cstddef>
 #include <functional>
-#include <optional>
-#include <span>
 #include <string>
 #include <vector>
 
@@ -12,6 +10,24 @@
 #include "CacheLedger.hpp"
 
 namespace qvac_lib_inference_addon_llama::cache {
+
+// The longest of `checkpoints` (may be null) that is a prefix of `prompt` no
+// longer than `limit` entries; null when none is.
+inline const Checkpoint* longestCheckpointWithin(
+    const Checkpoints* checkpoints, const Ledger& prompt, size_t limit) {
+  const Checkpoint* best = nullptr;
+  if (checkpoints == nullptr) {
+    return best;
+  }
+  for (const Checkpoint& checkpoint : *checkpoints) {
+    const size_t size = checkpoint.ledger.entries.size();
+    if (size <= limit && commonPrefix(checkpoint.ledger, prompt) == size &&
+        (best == nullptr || size > best->ledger.entries.size())) {
+      best = &checkpoint;
+    }
+  }
+  return best;
+}
 
 // Entries of `prompt` a state described by `state`, with its `checkpoints`,
 // can serve without decoding them again. When the memory can be trimmed back
@@ -25,32 +41,8 @@ inline size_t reusablePrefix(
   if (trimmable || shared == state.entries.size()) {
     return shared;
   }
-  size_t best = 0;
-  if (checkpoints != nullptr) {
-    for (const Checkpoint& checkpoint : *checkpoints) {
-      const size_t size = checkpoint.ledger.entries.size();
-      if (size > best && size <= shared &&
-          commonPrefix(checkpoint.ledger, prompt) == size) {
-        best = size;
-      }
-    }
-  }
-  return best;
-}
-
-// Index of the largest of `reusable`, the earliest on a tie, when it exceeds
-// `minimum`. Candidates are listed cheapest first, so a tie keeps the one
-// that costs least to bring in.
-inline std::optional<size_t>
-longestReusable(std::span<const size_t> reusable, size_t minimum) {
-  std::optional<size_t> best;
-  for (size_t i = 0; i < reusable.size(); ++i) {
-    if (reusable[i] > minimum &&
-        (!best.has_value() || reusable[i] > reusable[*best])) {
-      best = i;
-    }
-  }
-  return best;
+  const Checkpoint* best = longestCheckpointWithin(checkpoints, prompt, shared);
+  return best != nullptr ? best->ledger.entries.size() : 0;
 }
 
 // A conversation state another request can start from: a parked batch
@@ -71,24 +63,13 @@ struct DonorState {
 // Adopts `donor` into the requesting sequence; true when it did.
 using DonorAdopter = std::function<bool(const DonorState&)>;
 
-// Finds, among the states kept outside a request's own sequence, the one
-// that serves the most of its prompt. Implemented by the owner of those
-// states: the single-prompt `CacheManager` and the `ContinuousBatchScheduler`.
-class CacheSourceProvider {
-public:
-  CacheSourceProvider() = default;
-  CacheSourceProvider(const CacheSourceProvider&) = delete;
-  CacheSourceProvider& operator=(const CacheSourceProvider&) = delete;
-  CacheSourceProvider(CacheSourceProvider&&) = delete;
-  CacheSourceProvider& operator=(CacheSourceProvider&&) = delete;
-  virtual ~CacheSourceProvider() = default;
-
-  // Hands `adopt` the state with the longest `reusablePrefix` of `prompt`
-  // when it exceeds `minimum` (what the request's own sequence already
-  // serves). Returns what `adopt` returned, or false when no state qualified.
-  virtual bool offerDonor(
-      llama_seq_id seqId, const Ledger& prompt, bool trimmable, size_t minimum,
-      const DonorAdopter& adopt) = 0;
-};
+// Hands `adopt` the state kept outside the requesting sequence with the
+// longest `reusablePrefix` of `prompt`, when it exceeds `minimum` (what the
+// sequence already serves). Returns what `adopt` returned, or false when no
+// state qualified. Set by the owner of those states: the single-prompt
+// `CacheManager` and the `ContinuousBatchScheduler`.
+using CacheSourceProvider = std::function<bool(
+    const Ledger& prompt, bool trimmable, size_t minimum,
+    const DonorAdopter& adopt)>;
 
 } // namespace qvac_lib_inference_addon_llama::cache

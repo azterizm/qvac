@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -37,6 +36,8 @@ public:
   struct Match {
     std::string path;
     size_t reusable = 0;
+    // Ledger words read from the file's header.
+    std::vector<llama_token> words;
   };
 
   /// Remembers `path` as a cacheKey file of this model.
@@ -71,34 +72,18 @@ public:
       const size_t reusable =
           reusablePrefix(known.ledger, nullptr, prompt, trimmable);
       if (reusable > 0 && (!best.has_value() || reusable > best->reusable)) {
-        best = Match{.path = path, .reusable = reusable};
+        best = Match{.path = path, .reusable = reusable, .words = {}};
       }
+    }
+    if (best.has_value()) {
+      best->words = files_.at(best->path).words;
     }
     return best;
   }
 
-  /// Hands `fn` the ledger words of `path` when the file is still the one
-  /// last read. Returns what `fn` returned, or false when the file changed
-  /// or is unknown.
-  bool
-  use(const std::string& path,
-      const std::function<bool(const std::vector<llama_token>&)>& fn) {
-    std::vector<llama_token> words;
-    {
-      std::scoped_lock lock(mutex_);
-      const auto it = files_.find(path);
-      if (it == files_.end() || !it->second.read ||
-          !unchangedLocked(path, it->second)) {
-        return false;
-      }
-      words = it->second.words;
-    }
-    return fn(words);
-  }
-
   /// Loads `path` into `seqId` and checks that its ledger is `expected`.
-  /// False when the load failed or the file holds another state; the caller
-  /// then clears the sequence.
+  /// False when the load failed or the file was rewritten since it was read;
+  /// the caller then clears the sequence.
   static bool loadInto(
       llama_context* lctx, llama_seq_id seqId, const std::string& path,
       const std::vector<llama_token>& expected) {
@@ -150,29 +135,21 @@ private:
     Ledger ledger;
   };
 
-  [[nodiscard]] static bool
-  unchangedLocked(const std::string& path, const Known& known) {
-    std::error_code sizeEc;
-    std::error_code timeEc;
-    const auto size = std::filesystem::file_size(path, sizeEc);
-    const auto mtime = std::filesystem::last_write_time(path, timeEc);
-    return !sizeEc && !timeEc && size == known.size && mtime == known.mtime;
-  }
-
-  /// Reads `path` again when it changed. False when it is gone, empty or not
-  /// a current-format cacheKey file.
+  /// Reads `path` again when its size or modification time changed. False
+  /// when it is gone, empty or not a current-format cacheKey file.
   static bool refreshLocked(const std::string& path, Known& known) {
-    if (known.read && unchangedLocked(path, known)) {
-      return true;
-    }
-    known.read = false;
     std::error_code sizeEc;
     std::error_code timeEc;
     const auto size = std::filesystem::file_size(path, sizeEc);
     const auto mtime = std::filesystem::last_write_time(path, timeEc);
     if (sizeEc || timeEc || size == 0) {
+      known.read = false;
       return false;
     }
+    if (known.read && size == known.size && mtime == known.mtime) {
+      return true;
+    }
+    known.read = false;
     auto words = readLedgerWords(path);
     if (!words.has_value()) {
       return false;
