@@ -147,7 +147,14 @@ function peImports(buffer) {
 // module may import the dynamic Visual C++ runtime (the prebuild links the
 // static CRT, see vcpkg-overlays/triplets/x64-windows.cmake). A dynamic UCRT
 // shows up as the api-ms-win-crt-* API sets, not as ucrtbase.dll.
-const FORBIDDEN_WIN_IMPORTS = ['vulkan-1.dll', 'opencl.dll', 'nvcuda.dll', 'cudart64', 'cublas64']
+const FORBIDDEN_WIN_IMPORTS = [
+  'vulkan-1.dll',
+  'opencl.dll',
+  'nvcuda.dll',
+  'cudart64',
+  'cublas64',
+  'cublaslt64'
+]
 const FORBIDDEN_WIN_RUNTIME = ['vcruntime', 'msvcp', 'ucrtbase.dll', 'api-ms-win-crt-']
 
 test('win32 prebuild has no hard GPU-loader imports and ships the Vulkan backend DLL', async (t) => {

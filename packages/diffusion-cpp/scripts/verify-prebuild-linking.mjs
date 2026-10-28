@@ -146,7 +146,14 @@ function peImports(buffer) {
 
 // The prebuild links the static CRT; a dynamic UCRT shows up as the
 // api-ms-win-crt-* API sets.
-const FORBIDDEN_WIN_IMPORTS = ['vulkan-1.dll', 'opencl.dll', 'nvcuda.dll', 'cudart64', 'cublas64']
+const FORBIDDEN_WIN_IMPORTS = [
+  'vulkan-1.dll',
+  'opencl.dll',
+  'nvcuda.dll',
+  'cudart64',
+  'cublas64',
+  'cublaslt64'
+]
 const FORBIDDEN_WIN_RUNTIME = ['vcruntime', 'msvcp', 'ucrtbase.dll', 'api-ms-win-crt-']
 
 const prebuildsDir = process.argv[2]
@@ -199,11 +206,14 @@ for (const target of TARGETS) {
   }
 }
 
+// CI runs this gate only after every prebuild succeeded, so the merged
+// artifact always carries win32-x64; a missing one means it was dropped or
+// staged under the wrong name, and skipping it would pass the gate unchecked.
 for (const target of WIN_TARGETS) {
   const moduleName = moduleNameForHost(target)
   const addonPath = path.join(prebuildsDir, target, `${moduleName}.bare`)
   if (!fs.existsSync(addonPath)) {
-    console.log(`SKIP ${target}: no prebuild at ${addonPath}`)
+    fail(`${target}: no prebuild at ${addonPath}`)
     continue
   }
   checkedTargets++
