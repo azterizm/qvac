@@ -15,6 +15,7 @@
 #include "CacheLedger.hpp"
 #include "MediaLoadOrder.hpp"
 #include "RenderOverrides.hpp"
+#include "SpeculativeSequence.hpp"
 #include "addon/LlmErrors.hpp"
 
 class LlamaBatch;
@@ -74,6 +75,23 @@ stopReasonAfterRequestRollback(GenerationStopReason reason) {
 /// Per-sequence step outcome reported by `SequenceDriver::onLogitsReady`.
 struct SequenceStepResult {
   llama_token token = LLAMA_TOKEN_NULL;
+  bool finished = false;
+  bool contextOverflow = false;
+  GenerationStopReason stopReason = GenerationStopReason::None;
+};
+
+/// Outcome of verifying a speculative draft under the scheduler
+/// (`SequenceDriver::onDraftLogitsReady`).
+struct DraftStepResult {
+  /// The draft could not be rolled back by trimming: the sequence was
+  /// restored to `newPos` and the next step feeds the sampled token and
+  /// `speculativeDraft()` again. Nothing was streamed.
+  bool replay = false;
+  /// Live memory of the sequence ends here after the step.
+  llama_pos newPos = 0;
+  /// Tokens streamed to the caller, in order. Unless the sequence finished,
+  /// the last one is the new unfed sample.
+  std::vector<llama_token> tokens;
   bool finished = false;
   bool contextOverflow = false;
   GenerationStopReason stopReason = GenerationStopReason::None;
@@ -261,6 +279,25 @@ public:
     return {};
   }
 
+  /// Appends the driver's newest checkpoint to the cacheKey file being
+  /// written at `path`, after its sequence state
+  /// (`cache::appendCheckpointSection`), so a later process can restore it.
+  /// Best effort: a failure leaves the file with the state only. Drivers
+  /// without checkpoints write nothing.
+  virtual void appendCheckpointsToCacheFile(const std::string& path) const {
+    (void)path;
+  }
+
+  /// Adopts the checkpoint kept in the cacheKey file at `path`, whose
+  /// sequence state ends at `offset`, after that state was loaded and
+  /// accepted (`cache::readCheckpointSection`). Drivers without checkpoints
+  /// ignore them.
+  virtual void
+  adoptCheckpointsFromCacheFile(const std::string& path, uint64_t offset) {
+    (void)path;
+    (void)offset;
+  }
+
   /// The scheduler fed the plan up to `checkpointAtTextTokens` and decoded
   /// it; live memory for this sequence ends at `pos`. Drivers without
   /// checkpoints ignore it.
@@ -287,6 +324,45 @@ public:
       int logitIdx, unsigned generatedAfterAccept,
       const std::function<void(const std::string&)>& outputCallback,
       LlamaBatch* inlineDecodeBatch = nullptr) = 0;
+
+  /// Speculative decoding under the scheduler, one step per generating
+  /// sequence (see `speculative::SpeculativeSequence`): before the batch is
+  /// filled, `prepareSpeculativeDraft` asks for a draft continuing the unfed
+  /// `sampled` token at `pos`; the scheduler drafts for every sequence that
+  /// asked at once, then calls `finishSpeculativeDraft` on them. The batch
+  /// then carries `sampled` followed by `speculativeDraft()` with logits on
+  /// every entry, and `onDraftLogitsReady` verifies it. A draft the batch
+  /// had no room for is dropped with `discardSpeculativeDraft`. Drivers
+  /// without speculative decoding keep the defaults.
+  [[nodiscard]] virtual bool speculativeEnabled() const { return false; }
+  virtual bool prepareSpeculativeDraft(
+      llama_pos pos, llama_token sampled, unsigned generatedTokens) {
+    (void)pos;
+    (void)sampled;
+    (void)generatedTokens;
+    return false;
+  }
+  virtual void finishSpeculativeDraft() {}
+  [[nodiscard]] virtual std::vector<llama_token> speculativeDraft() const {
+    return {};
+  }
+  virtual void discardSpeculativeDraft() {}
+  /// `firstLogitIdx` is the batch index of the sampled token, `posBefore`
+  /// its position, `generatedBefore` the tokens streamed before this step.
+  virtual DraftStepResult onDraftLogitsReady(
+      int firstLogitIdx, llama_pos posBefore, unsigned generatedBefore,
+      const std::function<void(const std::string&)>& outputCallback) {
+    (void)firstLogitIdx;
+    (void)generatedBefore;
+    (void)outputCallback;
+    return {.newPos = posBefore};
+  }
+  /// Speculative counters of the sequence's current request.
+  [[nodiscard]] virtual qvac_lib_inference_addon_llama::speculative::
+      SpeculativeStats
+      speculativeStats() const {
+    return {};
+  }
 
   /// Final-token / clean-shutdown hook. Implementations should flush any
   /// pending UTF-8 buffer state and close streams. Called exactly once
@@ -333,8 +409,12 @@ public:
   /// Try to populate this sequence's KV-cache from a previously
   /// persisted cache. Returns true when the cache was loaded
   /// successfully; the scheduler then skips the corresponding prefix
-  /// tokens at admit time.
-  [[nodiscard]] virtual bool loadCache(const std::string& cacheKey) = 0;
+  /// tokens at admit time. With `adoptFileCheckpoints` the checkpoint kept
+  /// in the file is adopted too (`adoptCheckpointsFromCacheFile`); the
+  /// scheduler passes false when it holds checkpoints for the key that would
+  /// replace it anyway.
+  [[nodiscard]] virtual bool
+  loadCache(const std::string& cacheKey, bool adoptFileCheckpoints) = 0;
 
   /// The sequence memory already holds a state whose ledger is `stateTokens`
   /// (a slot kept resident across requests, or one just restored from the

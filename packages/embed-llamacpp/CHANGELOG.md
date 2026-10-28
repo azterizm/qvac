@@ -1,5 +1,213 @@
 # Changelog
 
+## [0.53.0] - 2026-10-27
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.23.1` -> `^0.24.0`, which carries
+  `qvac-fabric` `11259.0.1` -> `11259.1.0`
+  ([#5374](https://github.com/tetherto/qvac/pull/5374)): an opt-in deferred
+  gated delta net state commit for Qwen3.5 / Qwen3.5-MoE speculative decoding
+  and the two ggml ops it adds. A caret on a `0.x` version locks the minor, so
+  `^0.23.1` would not have resolved `0.24.0` on its own. The mobile dev
+  dependencies `@qvac/fabric-android-arm64` / `@qvac/fabric-ios` move to
+  `^0.24.0` with it.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.24.0` together.
+- No API change for this package.
+
+## [0.52.1] - 2026-10-26
+
+### Added
+
+- Image and audio embeddings for multimodal embedding models such as
+  EmbeddingGemma 2 ([#5237](https://github.com/tetherto/qvac/pull/5237)).
+  `files.projectionModel` takes the model's mmproj; `run()` then also takes
+  `{ inputs: [...] }`, each input a string or an ordered array of text and
+  `{ media: Uint8Array }` parts, one embedding per input. Inputs without
+  media keep the text path.
+- Projector options `image-max-tokens`, `image-min-tokens`,
+  `mmproj-no-audio`, `mmproj-use-gpu`, `image-max-megapixels` and
+  `audio-max-seconds` (default 600), each also in its underscore form. Set
+  without `files.projectionModel`, they fail the load with
+  `InvalidConfiguration`.
+- Error codes `UnableToLoadProjectionModel`, `UnsupportedMedia` and
+  `MediaEncodeFailed`.
+- `assessFit` takes the load's `projectionModel` and refuses a multimodal
+  load with `unsupported-config`, since the fitter does not count a
+  projector. An `error` result now carries a `message` naming the cause.
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.23.0` -> `^0.23.1`, which carries
+  `qvac-fabric` `11259.0.0` -> `11259.0.1`
+  ([#5339](https://github.com/tetherto/qvac/pull/5339)). `@qvac/fabric` 0.23.1
+  requires the matching `@qvac/fabric-android-arm64` / `@qvac/fabric-ios`, so
+  the mobile dev dependencies move to `^0.23.1`. They now take a caret, so a
+  later fabric patch no longer needs a manifest change.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.23.1` together.
+
+### Fixed
+
+- Embeddings are sized with `llama_model_n_embd_out`, so a model whose
+  output width differs from its hidden size (EmbeddingGemma 2: 512 hidden,
+  768-d output) no longer returns truncated vectors.
+
+## [0.52.0] - 2026-10-20
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.22.0` -> `^0.23.0`, which carries
+  `qvac-fabric` `11018.2.0` -> `11259.0.0`, a rebase onto upstream llama.cpp
+  b11259 ([#5171](https://github.com/tetherto/qvac/pull/5171)). A caret on a
+  `0.x` version locks the minor, so `^0.22.0` would not have resolved `0.23.0`
+  on its own. The native API changes, so the native addon is rebuilt against
+  the 0.23.0 headers.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.23.0` together.
+- No API change for this package.
+
+### Removed
+
+- The RAG with TurboVec example and its desktop integration test, with the
+  `@qvac/turbovec-ggml` dev dependency they needed
+  ([#5259](https://github.com/tetherto/qvac/pull/5259)). Both packages pin
+  `@qvac/fabric` by minor, so the dev dependency held this package on the
+  previous fabric until `@qvac/turbovec-ggml` was released. Neither was
+  published, and `IdMapIndex` still lives in `@qvac/turbovec-ggml`.
+
+### Fixed
+
+- Embedding loads with `n_parallel` 1 admit every prompt in a batch again on
+  fabric b11259, which no longer lifts the sequence limit for a unified KV
+  cache. The limit is `min(256, batch_size, ctx_size)`, so a `batch_size`
+  below 256 no longer aborts the process, and a batch of many short prompts
+  is split at the limit instead of failing to decode. The context reserves
+  one output row per sequence, so a short-query workload now holds up to
+  256 vocabulary-sized output rows.
+
+## [0.51.0] - 2026-10-19
+
+### Breaking
+
+- `pooling: "rank"` is no longer a `GGMLBert` option, and a model whose GGUF
+  defaults to rank pooling no longer loads in `GGMLBert`
+  ([#4995](https://github.com/tetherto/qvac/pull/4995)). Rank pooling returns
+  one classifier score per sequence, not an embedding, so `GGMLBert` read past
+  the end of the result: the vectors were mostly zeros that changed on every
+  run, and the process could crash. The load now fails with
+  `UnsupportedEmbeddings` before the weights load. Load reranker models with
+  `Reranker`.
+
+### Added
+
+- `Reranker` scores documents by relevance to a query with a reranker
+  (cross-encoder) GGUF such as jina-reranker, bge-reranker or Qwen3-Reranker
+  ([#4995](https://github.com/tetherto/qvac/pull/4995)).
+  `run({ query, documents })` resolves to one score per document, in the
+  order given; higher is more relevant. The query is paired with each
+  document as llama-server's `/rerank` does, and the scores match fabric's
+  `llama-embedding --pooling rank`. A GGUF that declares another pooling or
+  has no classifier head is rejected before its weights load.
+- Bounded FuzzTest coverage for `parseMainGpu` and
+  `preferredBackendTypeFromString`. Linux C++ CI runs the suite after unit
+  tests. The parsers compile without `@qvac/fabric`, so ASan and LeakSanitizer
+  stay at full strength. No public addon API changes.
+
+## [0.50.0] - 2026-10-16
+
+### Breaking
+
+- `IdMapIndex` and `IdMapIndexFilter` moved to the new `@qvac/turbovec-ggml`
+  addon, with the same API, error names and snapshot formats. The
+  `@qvac/embed-llamacpp/idMapIndex` subpath and the root `IdMapIndex` /
+  `IdMapIndexFilter` exports are gone, and the vector index is no longer
+  compiled into this addon. Replace
+  `require('@qvac/embed-llamacpp/idMapIndex')` with
+  `require('@qvac/turbovec-ggml/idMapIndex')`.
+
+### Added
+
+- `poll` and `poll-batch` are now documented public JavaScript load options.
+  They control the main and batch GGML threadpool busy-wait levels; both
+  default to `0`, `poll-batch` inherits an explicit `poll` when omitted, and
+  values outside `0`–`100` are rejected
+  ([#5083](https://github.com/tetherto/qvac/pull/5083)).
+
+### Fixed
+
+- Both GGML threadpools now default to `poll=0`, so GPU-offloaded embedding no
+  longer keeps CPU workers busy-spinning between graph work
+  ([#5083](https://github.com/tetherto/qvac/pull/5083)).
+
+## [0.48.1] - 2026-10-15
+
+### Fixed
+
+- On Windows, `assessFit` no longer fails with `0xC06D007E` when it is the
+  first fabric call in the process ([#5121](https://github.com/tetherto/qvac/pull/5121)). The addon now binds the
+  delay-loaded `@qvac/fabric` runtime when it loads, and loading throws an
+  error naming the fabric module if that fails.
+
+## [0.48.0] - 2026-10-14
+
+### Breaking
+
+- `assessFit` returns a Promise; the synchronous binding is removed
+  ([#5010](https://github.com/tetherto/qvac/pull/5010)). The fit runs on a worker thread so the JavaScript loop keeps
+  running, and concurrent calls run one at a time within the addon. A model
+  the fitter cannot read still resolves with `status: 'error'`; a malformed
+  request rejects instead of throwing. Change
+  `const fit = EmbedLlamacpp.assessFit(request)` to `const fit = await EmbedLlamacpp.assessFit(request)`.
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.21.1` -> `^0.22.0`, which carries
+  `qvac-fabric` `11018.1.0#1` -> `11018.2.0`
+  ([#5064](https://github.com/tetherto/qvac/pull/5064)). A caret on a `0.x`
+  version locks the minor, so `^0.21.1` would not have resolved `0.22.0` on
+  its own. `GGML_MAX_NAME` is now 128, so the native addon is rebuilt against
+  the 0.22.0 headers.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.22.0` together.
+- `@qvac/infer-base` dependency raised `^0.6.2` -> `^0.8.0`
+  ([#5070](https://github.com/tetherto/qvac/pull/5070)). `^0.6.2` never took 0.7.0 or 0.8.0; 0.8.0 adds an
+  optional `retainOutput: false` on `QvacResponse` and
+  `createJobHandler().start()` for consuming output events through
+  `onUpdate()` without keeping every chunk in memory ([#5028](https://github.com/tetherto/qvac/pull/5028)).
+  Retention stays enabled by default and this package does not pass the option, so there is no API or
+  runtime behaviour change for this package.
+
+## [0.47.0] - 2026-10-14
+
+### Breaking
+
+- An explicit `backendsDir` is scanned as given. It is no longer a prebuilds
+  root with `<host>/qvac__fabric` appended. Omit it and `@qvac/fabric` locates
+  the backends it ships, next to its runtime.
+- `resolveBackendsDir()` is removed.
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.20.0` -> `^0.21.1`, whose platform
+  packages are now ordinary addons. This package declares them itself: the
+  desktop ones as `optionalDependencies`, and `@qvac/fabric-android-arm64` and
+  `@qvac/fabric-ios` as optional `peerDependencies`.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.21.1` together.
+
+## [0.46.1] - 2026-10-13
+
+### Changed
+
+- `qvac-lib-inference-addon-cpp` dependency floor raised `1.4.0` -> `1.5.0`
+  ([#5030](https://github.com/tetherto/qvac/pull/5030)). The new library adds
+  `JsAsyncTask::run(env, work, marshal)`, which resolves a Promise with a value
+  marshalled on the JavaScript loop, and includes `<uv.h>` from headers that
+  use libuv types now that libjs no longer includes it from `<js.h>`.
+  Compile-time only; no API or runtime behaviour change for this package.
+
 ## [0.46.0] - 2026-10-09
 
 ### Added
@@ -118,7 +326,6 @@
   load's fit received that choice but the projection did not, so on Metal or
   Vulkan a MoE model's projected `gpuLayers` and `deviceBytes` could differ
   from the load.
-
 ## [0.43.0] - 2026-09-28
 
 ### Added

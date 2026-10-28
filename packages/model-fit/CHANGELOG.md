@@ -1,5 +1,59 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.22.0` -> `^0.24.0`, which carries
+  `qvac-fabric` `11018.2.0` -> `11259.1.0`, a rebase onto upstream llama.cpp
+  b11259 ([#5171](https://github.com/tetherto/qvac/pull/5171),
+  [#5339](https://github.com/tetherto/qvac/pull/5339),
+  [#5374](https://github.com/tetherto/qvac/pull/5374)). A caret on a
+  `0.x` version locks the minor, so `^0.22.0` would not have resolved `0.24.0`
+  on its own. The native API changes, so the native addon is rebuilt against
+  the 0.24.0 headers.
+- The mobile dev dependencies `@qvac/fabric-android-arm64` /
+  `@qvac/fabric-ios` take a caret, `^0.24.0`, instead of an exact pin, so a
+  later fabric patch no longer needs a manifest change.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.24.0` together.
+
+## [0.16.1] - 2026-10-15
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.21.1` -> `^0.22.0`, which carries
+  `qvac-fabric` `11018.1.0#1` -> `11018.2.0`. A caret on a `0.x` version
+  locks the minor, so `^0.21.1` would not have resolved `0.22.0` on its own.
+  `GGML_MAX_NAME` is now 128, so the native addon is rebuilt against the
+  0.22.0 headers.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.22.0` together.
+
+### Fixed
+
+- On Windows, the addon now binds the delay-loaded `@qvac/fabric` runtime
+  when it loads, so a first fabric call on a worker thread cannot fail with
+  `0xC06D007E` ([#5121](https://github.com/tetherto/qvac/pull/5121)). Loading throws an error naming the fabric
+  module if the bind fails.
+
+## [0.16.0] - 2026-10-14
+
+### Breaking
+
+- An explicit `backendsDir` is scanned as given. It is no longer a prebuilds
+  root with `<host>/qvac__fabric` appended. Omit it and `@qvac/fabric` locates
+  the backends it ships, next to its runtime.
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.20.0` -> `^0.21.1`, whose platform
+  packages are now ordinary addons. This package declares them itself: the
+  desktop ones as `optionalDependencies`, and `@qvac/fabric-android-arm64` and
+  `@qvac/fabric-ios` as optional `peerDependencies`.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.21.1` together.
+
 ## [0.15.0] - 2026-10-06
 
 ### Changed

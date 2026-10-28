@@ -1,5 +1,142 @@
 # Changelog
 
+## [0.31.0] - 2026-10-21
+
+This release adds Qwen-Image-2.1 generation and reference editing, including
+RGBA images. It also ships the platform packaging changes and native build
+and validation improvements merged since 0.30.0.
+
+## Features
+
+Qwen-Image-2.1 supports text-to-image generation, single-reference editing,
+and ordered multi-reference composition through `ImgStableDiffusion`.
+The optional `files.llmVision` field supplies the vision projector for loading
+and fit estimation. Reference inputs and generated PNGs retain alpha when
+the loaded model supports RGBA; existing models keep their RGB decoding path.
+Five runnable examples cover generation, editing, composition, transparent
+generation, and background removal, with a hash-verified model downloader.
+
+The addon now requires `stable-diffusion-cpp >= 2026-08-11#7` from the QVAC
+registry, incorporating the merged native Qwen integration without a local
+port overlay.
+
+## Breaking Changes
+
+The package now loads its native binary from a version-locked platform
+package through `#host-addon`. Desktop installs select the host's binary
+instead of downloading every platform. Source builds must run
+`npm run link:platform`, which is included in the native build scripts.
+The meta package is no longer itself an addon; consumers loading a native
+binary directly must use the platform package's module and layout.
+
+The addon discovers ggml backends beside the loaded native module. If you
+set `backendsDir` explicitly, pass the actual backend directory: it is now
+scanned directly instead of appending the host and module subdirectories.
+Remove the override to use automatic discovery.
+
+Unsupported `init_images` requests on SD1/SD2/SDXL now reject through native
+validation after job submission. Await `response.await()` to handle the error
+and update any handling that matches the former JavaScript error text.
+Input type, empty-array, and mutual-exclusion checks remain in JavaScript.
+
+## Other
+
+Reference conditioning follows the loaded model's capabilities. FLUX.2 no
+longer requires `prediction: 'flux2_flow'` for routing, but callers should keep
+it for the single-reference size fallback and `@imageN` prompt warnings.
+Leave prediction automatic for Qwen-Image-2.1. ESRGAN rejects RGBA output
+before generation because it accepts RGB images only.
+
+Linux x64 and arm64 release prebuilds now provision CUDA. Bounded FuzzTest
+coverage validates GGUF video-capability inspection, including limits on
+untrusted string lengths, without linking stable-diffusion.cpp so address
+and leak sanitizers remain fully enabled.
+
+## Pull Requests
+
+- [#5128](https://github.com/tetherto/qvac/pull/5128) - QVAC-25542 feat: add Qwen-Image-2.1 support to diffusion-cpp.
+- [#5044](https://github.com/tetherto/qvac/pull/5044) - QVAC-25559 feat[build]: split diffusion-cpp into per-platform packages.
+- [#4607](https://github.com/tetherto/qvac/pull/4607) - test[diffusion-cpp]: bounded FuzzTest for GGUF video-capability inspect.
+- [#5251](https://github.com/tetherto/qvac/pull/5251) - ci(diffusion-cpp): provision CUDA for Linux prebuilds.
+
+## [0.30.0] - 2026-10-14
+
+### Breaking
+
+- `assessFit` returns a Promise; the synchronous binding is removed
+  ([#5010](https://github.com/tetherto/qvac/pull/5010)). The fit runs on a worker thread so the JavaScript loop keeps
+  running, and concurrent calls run one at a time within the addon. A model
+  the fitter cannot read still resolves with `status: 'error'`; a malformed
+  request rejects instead of throwing. Change
+  `const fit = assessFit(request)` to `const fit = await assessFit(request)`.
+
+### Changed
+
+- `@qvac/infer-base` dependency raised `^0.6.2` -> `^0.8.0`
+  ([#5069](https://github.com/tetherto/qvac/pull/5069)). `^0.6.2` never took 0.7.0 or 0.8.0; 0.8.0 adds an
+  optional `retainOutput: false` on `QvacResponse` and
+  `createJobHandler().start()` for consuming output events through
+  `onUpdate()` without keeping every chunk in memory ([#5028](https://github.com/tetherto/qvac/pull/5028)).
+  Retention stays enabled by default and this package does not pass the option, so there is no API or
+  runtime behaviour change for this package.
+
+## [0.29.2] - 2026-10-13
+
+This patch reduces the size of the Windows native addon to address the npm
+package-size failure. It retains the existing model support and JavaScript API.
+
+## Bug Fixes
+
+Windows builds now export only Bare's registration entry points and optimize
+across the addon, ggml, and stable-diffusion libraries. The linker can discard
+unused code and shader data and combine identical sections, reducing the
+shipped binary without removing model or GPU features.
+
+The addon consumes the published ggml `2026-08-11#2` and stable-diffusion-cpp
+`2026-08-11#6` hotfixes while retaining the existing registry baseline. The
+logging include order also ensures libuv types are declared before the shared
+JavaScript logging headers are compiled.
+
+## Pull Requests
+
+- [#5007](https://github.com/tetherto/qvac/pull/5007) - Reduce diffusion Windows
+  binaries using registry hotfixes.
+
+## [0.29.1] - 2026-10-13
+
+### Changed
+
+- `qvac-lib-inference-addon-cpp` dependency floor raised `1.4.0` -> `1.5.0`
+  ([#5030](https://github.com/tetherto/qvac/pull/5030)). The new library adds
+  `JsAsyncTask::run(env, work, marshal)`, which resolves a Promise with a value
+  marshalled on the JavaScript loop, and includes `<uv.h>` from headers that
+  use libuv types now that libjs no longer includes it from `<js.h>`.
+  Compile-time only; no API or runtime behaviour change for this package.
+
+## [0.29.0] - 2026-10-12
+
+### Added
+
+- Metadata-only `assessFit` support for standalone ESRGAN (`mode: 'upscale'`)
+  and ABot-World (`mode: 'world'`), without loading model weights.
+- ABot-World fit estimates for a stated session length using
+  `workload.walkSteps`, with a default of 100 walk steps, including retained
+  latent history and the configured placement and streaming budgets.
+
+### Changed
+
+- Include ESRGAN weights, tiled computation, full-image buffers, and repeated
+  upscale passes in standalone and post-generation memory estimates.
+- Use checkpoint metadata to validate ESRGAN's actual output scale against
+  image limits, and account for shared host/GPU memory on Apple Silicon.
+- Build against the published `stable-diffusion-cpp` registry port
+  `2026-08-11#5` without a temporary engine overlay.
+
+### Pull Requests
+
+- [#4939](https://github.com/tetherto/qvac/pull/4939) - QVAC-26761 feat[api]:
+  add ESRGAN and ABot memory fit.
+
 ## [0.28.1] - 2026-10-09
 
 ### Fixed

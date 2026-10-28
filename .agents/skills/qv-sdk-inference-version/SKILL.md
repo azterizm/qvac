@@ -31,6 +31,10 @@ A patch on either side is one release on its own. An SDK patch leaves its range
 alone; an engine patch is picked up by the existing range with no SDK release at
 all.
 
+**On a release train** (`qv-release-train`) skip Step 2: `nx release version`
+writes the range. Steps 3 (`packages/sdk-python`) and 3b (`packages/sdk-kotlin`)
+still apply.
+
 ## When to use this skill
 
 **Applies to the SDK pod** (not the agent-stack cascade: cli / ai-sdk-provider /
@@ -114,15 +118,20 @@ python3 packages/sdk-kotlin/scripts/generate-contract.py
 python3 packages/sdk-kotlin/scripts/generate-contract.py --check
 ```
 
-`SDK_VERSION` is stamped from `packages/sdk/package.json` (Step 2 set it). Commit
-the `package.json` repin and any updates under
+`SDK_VERSION` is stamped from `packages/sdk/package.json` (Step 2 set it). The
+generator does not touch the test that asserts it: set the version literal in
+`packages/sdk-kotlin/src/commonTest/kotlin/io/tether/qvac/sdk/GeneratedContractTest.kt`
+by hand. `pr-checks-sdk-kotlin.yml` runs `checkVersionAlignment` and `jvmTest`
+on any PR that changes `packages/inference/package.json`, so the release PR and
+the backmerge both need these edits. Commit the `package.json` repin, the test
+literal, and any updates under
 `packages/sdk-kotlin/src/commonMain/kotlin/io/tether/qvac/sdk/generated/`.
 
 ### Step 4: Verify
 
 ```bash
 cd packages/sdk
-bun run enforce-inference-versions
+npm run enforce-inference-versions
 ```
 
 This is the same check CI runs inside `lint`.
@@ -133,7 +142,7 @@ This is the same check CI runs inside `lint`.
 
 - `packages/sdk/package.json`
 - `packages/sdk-python/src/tetherto/qvac_sdk/_generated/**`
-- `packages/sdk-kotlin/package.json` + `packages/sdk-kotlin/src/commonMain/kotlin/io/tether/qvac/sdk/generated/**`
+- `packages/sdk-kotlin/package.json` + `packages/sdk-kotlin/src/commonMain/kotlin/io/tether/qvac/sdk/generated/**` + `packages/sdk-kotlin/src/commonTest/kotlin/io/tether/qvac/sdk/GeneratedContractTest.kt`
 
 Commit alongside the release changelog. When invoked from `/qv-sdk-changelog`,
 this is part of the release commit; when invoked from `/qv-sdk-pr-create`, part
@@ -160,8 +169,8 @@ range, the parent skill prompts to run this skill first. Opt out with
 - [ ] `packages/sdk` version and `@qvac/inference` range share a major.minor
 - [ ] Range operator is `^` below 1.0.0, `~` from 1.0.0 onwards
 - [ ] `packages/sdk-python` `generate.py --check` passes
-- [ ] `packages/sdk-kotlin` `generate-contract.py --check` passes and `./gradlew checkVersionAlignment` is green
-- [ ] `bun run enforce-inference-versions` passes in `packages/sdk`
+- [ ] `packages/sdk-kotlin` `generate-contract.py --check` passes and `./gradlew checkVersionAlignment jvmTest` is green
+- [ ] `npm run enforce-inference-versions` passes in `packages/sdk`
 - [ ] Staged changes are only the version edits (+ the originating edit)
 - [ ] No CI auto-commits of this skill
 

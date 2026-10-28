@@ -43,13 +43,13 @@ const ALLOWED = [
   ...[
     ['.github/workflows/test-android-sdk.yml', 2],
     ['.github/workflows/test-ios-sdk.yml', 2],
-    ['.github/workflows/test-node-sdk.yml', 1],
+    ['.github/actions/sdk-e2e-node-prepare/action.yml', 1],
   ].map(([file, count]) => ({
     file,
     match: 'npm install --install-links',
     count,
     reason:
-      'packages/sdk/e2e consumer depends on electron and react-native, both of which install through postinstall.',
+      'packages/sdk-e2e consumer depends on electron and react-native, both of which install through postinstall.',
   })),
   {
     file: '.github/actions/run-mobile-integration-tests/build-mobile-app/action.yml',
@@ -75,10 +75,10 @@ const ALLOWED = [
     match: '"$PM" install',
     count: 1,
     reason:
-      'Reached only when $PM is bun (inference, ai-sdk-provider); the npm branch above passes the flag explicitly. Kept detectable so a revert to the $PM indirection for npm is caught.',
+      'Reached only when a package entry sets pkg_manager to something other than npm; no entry does today. The npm branch above passes the flag explicitly. Kept detectable so a revert to the $PM indirection for npm is caught.',
   },
   {
-    file: 'packages/sdk/e2e/package.json',
+    file: 'packages/sdk-e2e/package.json',
     match: '"install:build"',
     count: 1,
     reason:

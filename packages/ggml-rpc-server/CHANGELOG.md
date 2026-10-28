@@ -1,5 +1,116 @@
 # Changelog
 
+## [0.7.0] - 2026-10-27
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.23.1` -> `^0.24.0`, which carries
+  `qvac-fabric` `11259.0.1` -> `11259.1.0`
+  ([#5374](https://github.com/tetherto/qvac/pull/5374)): an opt-in deferred
+  gated delta net state commit for Qwen3.5 / Qwen3.5-MoE speculative decoding
+  and the two ggml ops it adds. A caret on a `0.x` version locks the minor, so
+  `^0.23.1` would not have resolved `0.24.0` on its own. The mobile dev
+  dependencies `@qvac/fabric-android-arm64` / `@qvac/fabric-ios` move to
+  `^0.24.0` with it.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.24.0` together.
+- The RPC protocol moves 111 -> 112. A server on this release refuses
+  clients on `@qvac/fabric` 0.23.x, and a 0.6.x server refuses clients on
+  0.24.0, so move servers and clients together. No API change for this
+  package.
+
+## [0.6.1] - 2026-10-26
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.23.0` -> `^0.23.1`, which carries
+  `qvac-fabric` `11259.0.0` -> `11259.0.1`
+  ([#5339](https://github.com/tetherto/qvac/pull/5339)). `@qvac/fabric` 0.23.1
+  requires the matching `@qvac/fabric-android-arm64` / `@qvac/fabric-ios`, so
+  the mobile dev dependencies move to `^0.23.1`. They now take a caret, so a
+  later fabric patch no longer needs a manifest change.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.23.1` together.
+- The RPC protocol stays at 111, so servers and clients on `@qvac/fabric`
+  0.23.0 and 0.23.1 still connect. No API change for this package.
+
+## [0.6.0] - 2026-10-20
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.22.0` -> `^0.23.0`, which carries
+  `qvac-fabric` `11018.2.0` -> `11259.0.0`, a rebase onto upstream llama.cpp
+  b11259 ([#5171](https://github.com/tetherto/qvac/pull/5171)). A caret on a
+  `0.x` version locks the minor, so `^0.22.0` would not have resolved `0.23.0`
+  on its own. The native API changes, so the native addon is rebuilt against
+  the 0.23.0 headers.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.23.0` together.
+- No API change for this package. The RPC protocol stays at 111, so servers on
+  this release still pair with clients on `@qvac/fabric` 0.22.0.
+
+## [0.5.1] - 2026-10-15
+
+### Fixed
+
+- On Windows, the addon now binds the delay-loaded `@qvac/fabric` runtime
+  when it loads, so a first fabric call on a worker thread cannot fail with
+  `0xC06D007E` ([#5121](https://github.com/tetherto/qvac/pull/5121)). Loading throws an error naming the fabric
+  module if the bind fails.
+
+## [0.5.0] - 2026-10-15
+
+### Changed
+
+- Without a `port`, the native server binds a free port itself and reports it,
+  instead of this package picking a free port and releasing it before the
+  server bound it. Another process could take the port in between, which showed
+  up as a rare `RpcServerStartError`. `allocateFreePort()` is still exported.
+- `rdmaCapable` and `expectRdma` now use the capability that `@qvac/fabric`
+  reports, replacing a search of the RPC module for a log line. They mean the
+  server will try RDMA, which on Linux also needs `libibverbs.so.1` installed,
+  an RDMA device, and `GGML_RPC_NO_RDMA` unset. A host with the library but no
+  RDMA device now reports `rdmaCapable: false`, so `expectRdma: true` fails
+  closed there.
+- Requires `@qvac/fabric` 0.22.0, whose RPC backend exports
+  `ggml_backend_rpc_server_get_port` and `ggml_backend_rpc_rdma_supported`.
+  A mobile app that still installs `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` 0.21 fails to start the server with
+  `RpcServerStartError`.
+
+## [0.4.0] - 2026-10-14
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.21.1` -> `^0.22.0`, which carries
+  `qvac-fabric` `11018.1.0#1` -> `11018.2.0`. A caret on a `0.x` version
+  locks the minor, so `^0.21.1` would not have resolved `0.22.0` on its own.
+  `GGML_MAX_NAME` is now 128, so the native addon is rebuilt against the
+  0.22.0 headers.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.22.0` together.
+- The RPC protocol moves 109 -> 111, so a server built against this release
+  only talks to clients on `@qvac/fabric` 0.22.0. On Linux the server loads
+  without libibverbs and uses TCP, and a malformed endpoint port is rejected
+  instead of binding a different port.
+
+## [0.3.0] - 2026-10-14
+
+### Breaking
+
+- An explicit `backendsDir` is scanned as given. It is no longer a prebuilds
+  root with `<host>/qvac__fabric` appended. Omit it and `@qvac/fabric` locates
+  the backends it ships, next to its runtime.
+
+### Changed
+
+- `@qvac/fabric` dependency bumped `^0.20.0` -> `^0.21.1`, whose platform
+  packages are now ordinary addons. This package declares them itself: the
+  desktop ones as `optionalDependencies`, and `@qvac/fabric-android-arm64` and
+  `@qvac/fabric-ios` as optional `peerDependencies`.
+- Mobile apps must move `@qvac/fabric` and `@qvac/fabric-android-arm64` or
+  `@qvac/fabric-ios` to `0.21.1` together.
+
 ## [0.2.0] - 2026-10-06
 
 ### Changed

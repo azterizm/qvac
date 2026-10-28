@@ -78,6 +78,7 @@ GGUF metadata** — there is no `modelType` to pass.
 | **CTC** (`parakeet-ctc-0.6b`) | English | argmax CTC | ~700 MiB | Fast, no punctuation/capitalization |
 | **TDT** (`parakeet-tdt-0.6b-v3`) | ~25 | RNN-T greedy + duration | ~715 MiB | Recommended default; PnC + language auto-detect |
 | **Unified** (`parakeet-unified-en-0.6b`) | English | RNN-T | ~715 MiB | One checkpoint for batch and cache-aware streaming at 80/160/560/1040 ms; PnC |
+| **TranscribePsy** (`transcribepsy-250m-eu-sub`) | 8 European | RNN-T greedy + duration | ~291 MiB | 254M distilled from TDT v3 for Dutch, English, French, German, Italian, Polish, Portuguese and Spanish; PnC; long recordings use the 60 s / 25 % windows it recommends; Core ML distribution runs encoder and decoder on the Neural Engine |
 | **EOU** (`parakeet-eou-120m-v1`) | English | RNN-T greedy + `<EOU>` | ~132 MiB | Streaming-trained; native end-of-turn token |
 | **Indic Conformer CTC** (`indic-conformer-ctc`) | Indic aggregate | argmax CTC + language mask | ~701 MiB | Multilingual Indic; set `parakeetConfig.language` (e.g. `"hi"`) |
 | **Sortformer v1** (`sortformer-4spk-v1`) | n/a | Diarization head (sliding history) | ~141 MiB | 4-speaker. Default for **offline** diarization |
@@ -85,11 +86,16 @@ GGUF metadata** — there is no `modelType` to pass.
 | **Nemotron 3 Diarization** (`Nemotron-3-Diarization`) | n/a | Diarization head + speaker cache | ~102 MiB | Up to 8 speakers, 10 ms probabilities, offline and AOSC streaming; official q8_0 GGUF |
 
 On macOS and iOS, TDT, Unified, EOU, and Sortformer v2.1 can also run their
-encoder on an optional Core ML sidecar; CTC and Indic Conformer CTC cannot
-with the pinned engine, and Sortformer v1 has no sidecar. See
+encoder on an optional Core ML sidecar, and TranscribePsy's published Core ML
+distribution runs its encoder and TDT decoder on the Neural Engine. Nemotron 3
+Diarization and Sortformer v2.1 can run their whole network on Core ML
+diarizer sidecars. CTC and Indic Conformer CTC cannot use a sidecar with the
+pinned engine, and Sortformer v1 has none. See
 [Core ML encoder sidecars](#core-ml-encoder-sidecars-apple).
 
-Upstream `.nemo` checkpoints are NVIDIA's; see the
+TranscribePsy is published ready to run by
+[QVAC on Hugging Face](https://huggingface.co/qvac/TranscribePsy-250M-EU-sub-gguf);
+its model card states the license. Upstream `.nemo` checkpoints are NVIDIA's; see the
 [Parakeet model cards](https://huggingface.co/collections/nvidia/parakeet-asr-models-66b50d5a37b9580ee4ba93c2)
 for the per-checkpoint NVIDIA Open Model License terms.
 
@@ -100,6 +106,9 @@ Qwen3-0.6B decoder, converted from
 [OpenMOSS-Team/MOSS-Transcribe-Diarize](https://huggingface.co/OpenMOSS-Team/MOSS-Transcribe-Diarize)
 (Apache-2.0). It transcribes a whole recording in one pass and returns
 timestamped segments labelled with the speaker (`S01`, `S02`, ...).
+
+The native CPU encoder uses fused attention to avoid materializing full
+attention score matrices.
 
 | File | Size | Notes |
 |------|-----:|-------|
@@ -125,6 +134,7 @@ language coverage, translation, and diarization.
 | If you need… | Use this model | Notes |
 | --- | --- | --- |
 | Default multilingual / English ASR (batch or duplex stream) | `parakeet-tdt-0.6b-v3` (q8_0 GGUF) | Recommended Parakeet default: ~25 languages, punctuation/capitalization, language auto-detect, low-latency streaming. |
+| Smallest multilingual model for phones (Dutch, English, French, German, Italian, Polish, Portuguese, Spanish) | `transcribepsy-250m-eu-sub` | 254M TDT distilled from `parakeet-tdt-0.6b-v3`: ~291 MiB q8_0, PnC, no language to set. Long recordings use the 60 s / 25 % windows the model recommends. On Apple, the Core ML distribution runs encoder and decoder on the Neural Engine. |
 | English batch and low-latency streaming with one checkpoint | `parakeet-unified-en-0.6b` | Standard RNN-T with punctuation and capitalization; use when multilingual TDT or native EOU tokens are not required. Streaming uses the native cache-aware encoder: `streamingChunkMs` accepts 80, 160, 560, or 1040 and `streamingRightLookaheadMs` 0, 80, 160, 240, 320, 560, or 1040, both snapped down to the nearest trained value. Defaults to 560 ms. |
 | Native end-of-turn for conversational / duplex English | `parakeet-eou-120m-v1` | Emits `<EOU>`; smallest Parakeet (~132 MiB). Pair with TDT when you need broader language coverage *and* EOU. |
 | Fast English-only, no punctuation | `parakeet-ctc-0.6b` | Lowest decode cost in the Parakeet family; no PnC. |
@@ -163,6 +173,13 @@ SDK code — see [Engine Selection](#engine-selection).
 - Bare runtime — see `engines.bare` in `package.json`
 - Linux requires Clang/LLVM 22 with libc++
 
+`ggml-speech` and `speech-cpp` are pinned with vcpkg `overrides` to the same
+versions in every speech addon (`@qvac/asr-ggml`, `@qvac/audiogen-ggml`,
+`@qvac/bci-whispercpp`, `@qvac/tts-ggml`), and `package.json` records the
+`ggml-speech` build as `qvac["ggml-speech"]`. The speech addons ship their ggml
+backends under the same file names, so an app that bundles several of them
+keeps one copy of each: use releases that record the same `ggml-speech`.
+
 ## Installation
 
 Make sure the Bare runtime is installed:
@@ -195,11 +212,12 @@ package selected at install time through `os`/`cpu` filtered
 
 Do not depend on desktop platform packages directly. Supported installers are
 npm 7+, pnpm, bun, and Yarn Berry. Yarn v1 and `--omit=optional` installs skip
-the platform package and fail at require time with an error naming the missing
-package; a locally built `prebuilds/` directory in the package root always
-takes precedence. Use `require('@qvac/asr-ggml').resolveBackendsDir()` to
-locate the directory holding the host's prebuilt binaries and dynamically
-loaded ggml backends.
+the platform package and fail at require time, and at `bare-pack` time, naming
+the missing package. Each platform package is an ordinary Bare addon whose
+`prebuilds/<host>/` holds the native module and, next to it, the dynamically
+loaded ggml backends the module finds on its own. A source build becomes
+loadable once `npm run link:platform` (run by `npm run build:native`) stages it
+as the host's platform package in `node_modules/`.
 
 Mobile targets are cross-built, so no install host ever matches their `os`,
 and `optionalDependencies` filtering can never select them. Mobile
@@ -497,10 +515,12 @@ Engine-specific segment fields:
 
 `assessFit` projects a load against the memory free right now. It reads model metadata and never weight data. The registry publishes a weightless copy of each model, and passing it answers the same as passing the model itself, so the projection can run before the model is downloaded: for parakeet a GGUF without its data, for whisper and its Silero VAD model a GGUF description of the `.bin` (its settings, vocabulary sizes and tensor list, tens of KB). It is a module export, not an instance method — nothing is loaded to call it.
 
+`assessFit` returns a Promise. Concurrent calls run one at a time. A model the fitter cannot read resolves with `status: 'error'`; only a broken request rejects.
+
 ```js
 const ASRGgml = require('@qvac/asr-ggml')
 
-const fit = ASRGgml.assessFit({
+const fit = await ASRGgml.assessFit({
   engine: 'whisper',
   modelPath: '/models/whisper.bin',
   vadModelPath: '/models/silero-vad.bin',
@@ -515,6 +535,7 @@ fit.deviceName
 fit.deviceBytes
 fit.weightsBytes
 fit.hostBytes
+fit.coremlBytes // parakeet on macOS and iOS: Core ML diarizer sidecars the workload can load
 fit.report
 ```
 
@@ -526,7 +547,7 @@ fit.report
 | `audioSeconds` | Longest single transcribe the projection must cover. Required for MOSS; defaults to 300 for whisper and parakeet. |
 | `gpuLayers` | Greater than 0 requests the GPU stack, with the fallbacks a real load applies. Omitted, parakeet and MOSS project on the CPU and whisper on the GPU, matching what each load does. |
 | `marginBytes` | Free memory that must remain for the projection to count as fitting. Defaults to the engine's own headroom, which is 256 MiB for parakeet and MOSS. |
-| `backendsDir` | The prebuilds root. The backends are read from the per-target subdir under it, the same path a load reads. |
+| `backendsDir` | Directory scanned as given for the ggml backends, the same path a load reads. Unset scans next to the loaded module. |
 | `vadModelPath` | Whisper: projected alongside the model; the VAD model or its weightless copy. Omitted means no VAD. |
 | `decoders` | Whisper: worst-case resident decoders, the `best_of` or `beam_size` the run will use. The KV cache and decode graph grow with it. |
 | `flashAttn`, `gpuDevice` | Whisper: as the load takes them. |
@@ -536,7 +557,7 @@ fit.report
 MOSS-Transcribe-Diarize uses an explicit duration and the same per-call options as `run`:
 
 ```js
-const fit = ASRGgml.assessFit({
+const fit = await ASRGgml.assessFit({
   engine: 'moss-transcribe',
   modelPath: '/models/moss-transcribe-diarize-q8_0.gguf',
   audioSeconds: 90,
@@ -694,7 +715,10 @@ diarization model.
 does not pay the GPU shader or kernel compile. `longFormWindowFrames` bounds
 the offline encoder window (0 picks it from the model, a negative value
 always runs one pass), which keeps memory flat on long `run()` inputs;
-`cancel()` also takes effect between those windows.
+`cancel()` also takes effect between those windows. With 0, TranscribePsy
+gets the 60 s windows with 25 % overlap it recommends (750 frames with 94
+frames of context each side); the other models get the engine's balanced
+automatic windows.
 
 For four-speaker streaming diarization, use the Sortformer v2.1 GGUF. For up to
 eight speakers, use Nemotron 3 Diarization. Both enable their speaker cache
@@ -711,8 +735,18 @@ and one streaming chunk.
 | Option | Default | Description |
 | --- | --- | --- |
 | `maxThreads` | `0` | CPU threads (0 lets the engine pick). |
-| `useGPU` | `false` | Use the linked ggml GPU backend (Metal / Vulkan / OpenCL / CUDA). |
-| `backendsDir` | package `prebuilds/` | Directory of the dynamically loaded ggml backends. |
+| `useGPU` | `false` | Select a GPU automatically when `backend` is `auto`. |
+| `backend` | `auto` | Native selector: `cpu`, `cuda`, `vulkan`, or an exact ggml device name such as `CUDA0` or `Vulkan0`. Explicit selection overrides `useGPU` and fails at load if unavailable. |
+| `backendsDir` | next to the loaded module | Directory scanned as given for the dynamically loaded ggml backends. |
+
+For example, `mossTranscribeConfig: { backend: 'cuda' }` requests CUDA even
+with the default `useGPU: false`; `{ backend: 'cpu', useGPU: true }` selects
+the CPU ggml backend. `auto` (or an empty selector) preserves automatic selection and fallback.
+Pass the same `backend` to `assessFit({ engine: 'moss-transcribe', ... })`
+to project on that device; it overrides `gpuLayers`. A missing explicit device
+returns a fit error instead of a CPU projection. `getBackendInfo()` reports
+the resolved backend after load. CUDA/Vulkan require compatible native
+`speech-cpp` libraries and the corresponding backend in the addon build.
 
 Any other key throws `INVALID_CONFIG` (24015). Prompt, hotwords and the token
 bound are per call; see
@@ -824,15 +858,13 @@ additionally reports
 
 Two paths matter on Android and Linux:
 
-- **`backendsDir`** (in `whisperConfig` / `parakeetConfig`) — root directory
-  holding dynamically-loaded ggml backend libraries (CUDA, Vulkan, OpenCL,
-  per-arch CPU variants). Defaults to `resolveBackendsDir()`: the package's
-  own `prebuilds/` when present (local builds, mobile flatten), otherwise the
-  installed platform package (see [Platform packages](#platform-packages));
-  the native addon
-  appends `<bare-target>/<module-name>` before scanning. Pass an explicit path
-  when backend libraries ship elsewhere — e.g. Android's
-  `ApplicationInfo.nativeLibraryDir` when they are packaged inside the APK.
+- **`backendsDir`** (in `whisperConfig` / `parakeetConfig`) — directory
+  scanned, as given, for dynamically-loaded ggml backend libraries (CUDA,
+  Vulkan, OpenCL, per-arch CPU variants). Unset scans the addon's own: the
+  directory its native module was loaded from
+  (`prebuilds/<host>/qvac__asr-ggml-<suffix>/` in a platform package, the
+  app's native library directory after `bare-link`). Pass a path only when
+  backend libraries ship somewhere else.
   No-op on Apple, where backends are statically linked.
 - **`openclCacheDir`** (parakeet) — persistent directory for ggml-opencl's
   compiled program-binary cache. Android-only; pass the host app's cache
@@ -847,8 +879,9 @@ the ggml backend. It is opt-in by presence: at `load()` the engine looks for a
 compiled `<stem>-encoder.mlmodelc` next to the GGUF, where `<stem>` is the GGUF
 name with its quantization suffix stripped, so one sidecar serves every tier
 (`parakeet-tdt-0.6b-v3.q8_0.gguf` and `.f16.gguf` both resolve to
-`parakeet-tdt-0.6b-v3-encoder.mlmodelc`). The published models ship without
-sidecars, so a model directory behaves as before until you stage one. A
+`parakeet-tdt-0.6b-v3-encoder.mlmodelc`). The NVIDIA models ship without
+sidecars, so a model directory behaves as before until you stage one;
+TranscribePsy publishes its Core ML distribution ready-made (see the table). A
 missing sidecar, an input shape it does not take, or a failed prediction falls
 back to ggml, and `PARAKEET_COREML_DISABLE=1` in the process environment forces
 ggml.
@@ -857,12 +890,27 @@ ggml.
 | --- | --- | --- | --- |
 | TDT (`parakeet-tdt-0.6b-v3`) | `<stem>-encoder.mlmodelc` | any length: shorter inputs are zero-padded to the compiled shape, longer offline inputs are split into overlapping windows | only on fallback |
 | Unified (`parakeet-unified-en-0.6b`) | `<stem>-encoder.mlmodelc` | `run()`, padded or windowed like TDT | `runStreaming()`, which uses the cache-aware encoder |
+| TranscribePsy (`transcribepsy-250m-eu-sub-coreml.gguf`, the encoder-less GGUF of the Core ML distribution) | `<stem>-encoder.mlmodelc` and `<stem>-decoder.mlmodelc` | any length: 15 s Neural Engine windows with 1.28 s of seam context; the TDT decoder runs on the Neural Engine as well | never: without its encoder sidecar that GGUF fails to load, since it carries no encoder weights. The full `transcribepsy-250m-eu-sub.gguf` behaves like TDT |
 | EOU (`parakeet-eou-120m-v1`) | `<stem>-encoder.mlmodelc` | inputs of exactly the compiled mel length | every other length, including streaming windows of a different length |
-| Sortformer v2.1 + AOSC | `<stem>-encoder.mlmodelc` (batch), `<stem>-encoder-bypass-pre-encode.mlmodelc` (AOSC) | batch: exactly the compiled length; AOSC: slabs up to the masked capacity (410 encoder frames for the default geometry) | other batch lengths, larger AOSC slabs; the speaker head always |
+| Sortformer v2.1 + AOSC, whole network | `<stem>-diarizer-<frames>.mlmodelc`, one fixed capacity per bundle (410 frames covers the default AOSC slab and batch inputs up to 32.8 s) | batch inputs and AOSC steps of up to its capacity: the conformer encoder, speaker transformer and head run on Core ML, the smallest capacity that fits is used and padded rows are masked | longer batch inputs, and every call if the bundle fails |
+| Sortformer v2.1 + AOSC, encoder only | `<stem>-encoder.mlmodelc` (batch), `<stem>-encoder-bypass-pre-encode.mlmodelc` (AOSC) | used when no diarizer bundle covers the call. Batch: exactly the compiled length; AOSC: slabs up to the masked capacity (410 encoder frames for the default geometry) | other batch lengths, larger AOSC slabs; the speaker head always |
+| Nemotron 3 Diarization (`Nemotron-3-Diarization`) | `<stem>-diarizer-<frames>.mlmodelc`, one fixed capacity per bundle (358 frames covers offline inputs up to 28.6 s and the default live chunk, 745 the 30 s long-form blocks and offline inputs up to 59.6 s) | offline, long-form and live calls of up to a capacity: the whole network runs on Core ML, with the smallest capacity that fits | calls above every capacity, and every call if the bundle fails |
 | CTC (`parakeet-ctc-0.6b`), Indic Conformer CTC | none in the pinned `speech-cpp` | — | always (the engine adds CTC sidecars from `speech-cpp` `2026-09-24`) |
 | Sortformer v1 | none | — | always |
 | Whisper | none: the `whisper` feature builds without `WHISPER_COREML` | — | always |
 | MOSS-Transcribe-Diarize | `moss-transcribe-diarize-encoder.mlmodelc` | every 30 s window: the audio encoder and adaptor run on Core ML, the decoder on ggml | only on fallback |
+
+Diarizer bundles load on first use, and each capacity costs 190-220 MiB of
+weights. They pay off on base and Pro chips and iOS (1.4-2.7x over Metal on an
+M4). A Max or Ultra GPU is as fast as the Neural Engine (0.70-1.17x on an M3
+Ultra), so leave them out there. `PARAKEET_COREML_DIARIZER_DISABLE=1` ignores
+them and keeps the encoder-only sidecars. `assessFit` charges the bundles a
+workload can load as `coremlBytes`. Diarizer bundles are not in the model
+registry yet: export them with
+`engines/parakeet/scripts/export-nemotron-diarization-coreml.py` and
+`export-sortformer-diarizer-coreml.py`. The
+[Parakeet backends guide](https://github.com/tetherto/qvac-fabric-speech.cpp/blob/master/engines/parakeet/docs/backends.md#core-ml-diarizer-sidecars)
+gives the commands and the measured speedups.
 
 `getBackendInfo().encoderOnCoreml` (with `encoderBackend: 'coreml'`) and
 `RuntimeStats.encoderOnCoreml` report that a sidecar loaded at `load()`, not
@@ -912,6 +960,16 @@ npm run download-models                 # interactive picker into ./models/
 npm run download-models:parakeet:registry              # all types
 npm run download-models:parakeet:registry -- -t tdt    # just TDT
 npm run download-models:parakeet:registry -- -t unified
+```
+
+**TranscribePsy**, published ready to run on Hugging Face (the q8_0 GGUF; on
+Apple also the Core ML distribution, whose three files stay together under
+their published names):
+
+```bash
+python -m pip install huggingface_hub
+hf download qvac/TranscribePsy-250M-EU-sub-gguf transcribepsy-250m-eu-sub.gguf --local-dir models
+hf download qvac/TranscribePsy-250M-EU-sub-coreml --local-dir models/transcribepsy-coreml
 ```
 
 **Parakeet**, converting NVIDIA `.nemo` yourself:
@@ -999,8 +1057,10 @@ npm run build          # build:ts (TypeScript) + build:native (bare-make)
 npm run build:cuda     # same, with the CUDA backend compiled in (needs nvcc)
 ```
 
-`build:native` runs `bare-make generate` → `bare-make build` →
-`bare-make install`. `build:native:cuda` is the same chain with
+`build:native` runs `bare-make generate`, `bare-make build`,
+`bare-make install` and `npm run link:platform`, which stages
+`prebuilds/<host>/` as `node_modules/@qvac/asr-ggml-<host>`: `#host-addon`
+only ever loads a platform package. `build:native:cuda` is the same chain with
 `-D ASR_CUDA=ON` on the generate step.
 
 ### Test
@@ -1042,7 +1102,52 @@ The MOSS-Transcribe-Diarize integration test (`moss-transcribe.test.js`, part of
 `test:integration:parakeet`) runs when `QVAC_TEST_MOSS_TRANSCRIBE_GGUF` points
 at a GGUF and is skipped otherwise; the C++ suite transcribes a real recording
 when `QVAC_TEST_MOSS_TRANSCRIBE_GGUF` and `QVAC_TEST_MOSS_TRANSCRIBE_AUDIO`
-(16 kHz s16le raw) are set.
+(16 kHz s16le raw) are set. To check a specific backend with the JS integration
+test, also set `QVAC_TEST_MOSS_TRANSCRIBE_BACKEND=cuda` or `vulkan` (or an exact
+device name). It asserts the resolved backend before transcription; a missing
+requested backend fails instead of silently validating CPU. An explicit selector
+also fails if the model or audio fixture is missing; only the default `auto`
+mode permits optional-fixture skips. Selectors are case-sensitive, matching
+native device names. Run these model
+tests on provisioned hardware with sufficient memory. Mocked JS forwarding
+tests and the C++ option-mapping tests do not establish GPU execution.
+
+### OpenMOSS native dependency validation
+
+The exact native dependency versions are declared in [vcpkg.json](vcpkg.json).
+The registry configuration is declared in
+[vcpkg-configuration.json](vcpkg-configuration.json).
+The native dependency provides the explicit MOSS backend selector used by the
+addon; validate the packaged addon against the checked-in manifests.
+
+On a provisioned Linux NVIDIA host with CUDA 13, Vulkan drivers, sufficient
+memory, and package development dependencies installed, run from this package:
+
+```sh
+# Bound both dependency compilation and addon compilation.
+export VCPKG_MAX_CONCURRENCY=2 CMAKE_BUILD_PARALLEL_LEVEL=2
+npm run build:ts
+bare-make generate --build build-moss -D ASR_CUDA=ON -D BUILD_TESTING=OFF
+bare-make build --build build-moss --parallel 2
+bare-make install --build build-moss
+npm run link:platform
+
+# Stage the full MOSS GGUF and examples/samples/LastQuestion_long_ES.raw first.
+: "${QVAC_TEST_MOSS_TRANSCRIBE_GGUF:?Set this to the provisioned MOSS GGUF}"
+export QVAC_TEST_MOSS_TRANSCRIBE_GGUF
+node_modules/.bin/brittle -r test/integration/all.js test/integration/moss-transcribe.test.js
+QVAC_TEST_MOSS_TRANSCRIBE_BACKEND=cuda INTEGRATION_TEST_TIMEOUT=1800 \
+  bash test/integration/parakeet-run-tests.sh
+QVAC_TEST_MOSS_TRANSCRIBE_BACKEND=vulkan INTEGRATION_TEST_TIMEOUT=1800 \
+  bash test/integration/parakeet-run-tests.sh
+```
+
+For a Vulkan-only Linux host, generate with `-D ASR_CUDA=OFF` and run only the
+Vulkan command. These checks must execute both default-prompt and hotword
+transcription and assert the selected backend; an explicit backend run fails
+when a fixture is missing. Registry dry-runs, forwarding tests, and compilation
+alone do not validate packaged addon GPU inference. Run packaged validation on
+the same source revision and native dependencies that will be shipped.
 
 Typical loop: `npm install && npm run build && npm run test:integration`.
 
@@ -1166,6 +1271,7 @@ Parakeet:
 
 - [`examples/parakeet-transcribe.js`](https://github.com/tetherto/qvac/blob/main/packages/asr-ggml/examples/parakeet-transcribe.js) — CTC, TDT, Unified, EOU, or Sortformer transcription
 - [`examples/parakeet-unified-transcribe.js`](https://github.com/tetherto/qvac/blob/main/packages/asr-ggml/examples/parakeet-unified-transcribe.js) — batch transcription with `parakeet-unified-en-0.6b`
+- [`examples/parakeet-transcribepsy-transcribe.js`](https://github.com/tetherto/qvac/blob/main/packages/asr-ggml/examples/parakeet-transcribepsy-transcribe.js) — TranscribePsy transcription with the model-recommended or explicit `--window-sec` / `--overlap` long-form windows, reporting whether the encoder ran on Core ML
 - [`examples/parakeet-indic-conformer-transcribe.js`](https://github.com/tetherto/qvac/blob/main/packages/asr-ggml/examples/parakeet-indic-conformer-transcribe.js) — Indic Conformer transcription with the required `--language <id>` option
 - [`examples/parakeet-diarized-transcribe.js`](https://github.com/tetherto/qvac/blob/main/packages/asr-ggml/examples/parakeet-diarized-transcribe.js) — Sortformer + ASR, "who said what"
 - [`examples/nemotron-diarization.js`](https://github.com/tetherto/qvac/blob/main/packages/asr-ggml/examples/nemotron-diarization.js) — Nemotron 3 offline 8-speaker diarization
@@ -1192,6 +1298,7 @@ npm run example:whisper:reload
 npm run example:whisper:decoder
 npm run example:parakeet
 npm run example:parakeet:unified
+npm run example:parakeet:transcribepsy -- --model <gguf> --audio <file>
 npm run example:parakeet:indic-conformer
 npm run example:parakeet:diarize
 npm run example:parakeet:nemotron-diarize

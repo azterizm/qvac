@@ -35,6 +35,8 @@ export interface WhisperFitRequest extends AsrFitCommon {
 }
 export interface MossTranscribeFitRequest extends AsrFitCommon, MossTranscribeRunOptions {
     engine: 'moss-transcribe';
+    /** Same selector as mossTranscribeConfig.backend; overrides gpuLayers. */
+    backend?: string;
     audioSeconds: number;
     threads?: number;
 }
@@ -61,6 +63,13 @@ export interface AsrFitResult {
     weightsBytes: number;
     hostBytes: number;
     report: string;
+    /**
+     * Parakeet on macOS and iOS: system RAM of the Core ML diarizer sidecars
+     * (`<stem>-diarizer-<frames>.mlmodelc`) a Nemotron 3 Diarization or
+     * Sortformer v2.1 workload can load, counted in the verdict on unified
+     * memory. 0 without sidecars and on other platforms.
+     */
+    coremlBytes?: number;
     /** Parakeet and MOSS-Transcribe. */
     encoderComputeBytes?: number;
     decoderStateBytes?: number;
@@ -88,8 +97,10 @@ export interface AsrFitResult {
  * each load does. `marginBytes` defaults to the engine's own headroom, which
  * is 256 MiB for parakeet.
  *
- * A model the fitter cannot read comes back as `status: "error"` with the
- * engine's reason. Only a broken request throws.
+ * A model the fitter cannot read resolves with `status: "error"` and the
+ * engine's reason. Only a broken request rejects.
+ *
+ * Concurrent calls run one at a time.
  */
-export declare function assessFit(request: AsrFitRequest): AsrFitResult;
+export declare function assessFit(request: AsrFitRequest): Promise<AsrFitResult>;
 export {};

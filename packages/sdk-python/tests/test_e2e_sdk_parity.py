@@ -1,11 +1,11 @@
 """Real-model e2e mirroring the SDK e2e suite's deterministic success cases
-(packages/sdk/e2e/tests/*), run through the PRODUCTION BareRpcTransport --
+(packages/sdk-e2e/catalog/*), run through the PRODUCTION BareRpcTransport --
 same prompts, same models, same output expectations as the JS smoke suite,
 so the Python client is held to the JS client's output bar, not a loose
 "non-empty" check.
 
 Gated exactly like test_bare_rpc_transport.py: needs bare_rpc and a
-built SDK worker (`bun run build` in packages/sdk). Models are the SDK e2e's
+built SDK worker (`npm run build` in packages/sdk). Models are the SDK e2e's
 own smoke resources; all are commonly cached, and fetch over P2P otherwise.
 """
 
@@ -65,7 +65,7 @@ async def _load(transport, model_src, model_type, **model_config):
 
 
 # NOTE: completion arithmetic/multi-turn and translation autodetect moved to
-# the shared cross-client corpus (packages/sdk/e2e/conformance/cases.json,
+# the shared cross-client corpus (packages/sdk-e2e/catalog/conformance/cases.json,
 # driven by test_conformance.py). This file keeps the cases whose assertions
 # aren't a simple contains/nonempty check: semantic embedding order, OCR
 # contains-any, and the translate undetermined-language error path.

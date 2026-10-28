@@ -15,8 +15,43 @@ class FieldQvacSdkWireContract(RootModel[Any]):
     root: Annotated[
         Any,
         Field(
-            description="Generated from the SDK Zod schemas by `bun run contract:export`. Do not edit by hand. Requests use the schema input shape, responses the output shape; runtime-only refinements and transforms stay server-side.",
+            description="Generated from the SDK Zod schemas by `npm run contract:export`. Do not edit by hand. Requests use the schema input shape, responses the output shape; runtime-only refinements and transforms stay server-side.",
             title="@qvac/sdk wire contract",
+        ),
+    ]
+
+
+class Hotword(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class AssessModelFitRequestModelsItemTranscriptionWorkload(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    prompt: str | None = None
+    hotwords: Annotated[
+        list[Hotword] | None,
+        Field(
+            description="MOSS names and domain terms; at most 64 entries of 64 UTF-8 bytes each.",
+            max_length=64,
+        ),
+    ] = None
+    max_new_tokens: Annotated[
+        int | None,
+        Field(
+            alias="maxNewTokens",
+            description="MOSS generated-token limit; 0 uses the model default.",
+            ge=0,
+            le=2147483647,
+        ),
+    ] = None
+    audio_seconds: Annotated[
+        float,
+        Field(
+            alias="audioSeconds",
+            description="Longest whole recording to project.",
+            gt=0.0,
         ),
     ]
 
@@ -26,10 +61,13 @@ class AssessModelFitRequestModelsItemModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -130,10 +168,13 @@ class AssessModelFitRequestModelsItemModelType(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -153,6 +194,46 @@ class AssessModelFitRequestModelsItemModelType(Enum):
     classification = "classification"
 
 
+class MossTtsFitWorkload(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    prompt_rows: Annotated[
+        int,
+        Field(
+            alias="promptRows",
+            description="Complete native prompt rows, including dialogue and references.",
+            gt=0,
+            le=2147483647,
+        ),
+    ]
+    reference_samples: Annotated[
+        int,
+        Field(
+            alias="referenceSamples",
+            description="Total mono reference audio samples.",
+            ge=0,
+            le=2147483647,
+        ),
+    ]
+    streaming: Annotated[
+        bool, Field(description="Whether the MOSS workload uses native streaming.")
+    ]
+
+
+class MossSoundEffectFitWorkload(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    prompt: Annotated[str, Field(description="Sound-effect description.", min_length=1)]
+    seconds: Annotated[
+        float,
+        Field(
+            description="Sound-effect duration in seconds, up to 30.", gt=0.0, le=30.0
+        ),
+    ]
+
+
 class AssessModelFitRequestModelsItemModelConfig(RootModel[dict[str, Any]]):
     root: Annotated[
         dict[str, Any],
@@ -164,6 +245,14 @@ class AssessModelFitRequestModelsItemModelConfig(RootModel[dict[str, Any]]):
 
 
 class AssessModelFitRequestModelsItem(GeneratedBaseModel):
+    transcription_workload: Annotated[
+        AssessModelFitRequestModelsItemTranscriptionWorkload | None,
+        Field(
+            alias="transcriptionWorkload",
+            description="MOSS fit-only workload. Required for a native MOSS projection; does not configure loading.",
+            title="AssessModelFitRequestModelsItemTranscriptionWorkload",
+        ),
+    ] = None
     model_src: Annotated[
         str | AssessModelFitRequestModelsItemModelSrc | None,
         Field(
@@ -177,6 +266,13 @@ class AssessModelFitRequestModelsItem(GeneratedBaseModel):
             alias="modelType",
             description="Engine that would run the load. Inferred from `modelSrc` when omitted, as `loadModel` infers it; required only where the source does not name one.",
             title="AssessModelFitRequestModelsItemModelType",
+        ),
+    ] = None
+    tts_workload: Annotated[
+        MossTtsFitWorkload | MossSoundEffectFitWorkload | None,
+        Field(
+            alias="ttsWorkload",
+            description="Fit-only MOSS-TTS/TTSD or MOSS-SoundEffect workload; never passed to model loading.",
         ),
     ] = None
     model_config_: Annotated[
@@ -521,6 +617,16 @@ class AudioEditStreamRequestSourceAudioFilePath(GeneratedBaseModel):
     value: str
 
 
+class AudioEditStreamRequestReferenceAudioBase64(GeneratedBaseModel):
+    type: Literal["base64"] = "base64"
+    value: str
+
+
+class AudioEditStreamRequestReferenceAudioFilePath(GeneratedBaseModel):
+    type: Literal["filePath"] = "filePath"
+    value: str
+
+
 class AudioEditStreamRequest(GeneratedBaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -539,9 +645,87 @@ class AudioEditStreamRequest(GeneratedBaseModel):
     seed: Annotated[
         int | None,
         Field(
-            description="Seeds the first operation; each following operation uses seed + its index.",
+            description="Seeds the first operation; each following operation uses seed + its index. Omit for a random one, reported in `stats.metadata.seed`.",
             ge=-9007199254740991,
             le=9007199254740991,
+        ),
+    ] = None
+    vocal_language: Annotated[
+        str | None,
+        Field(
+            alias="vocalLanguage",
+            description="Vocal language hint for the edit prompts; the engine defaults to 'unknown'.",
+            min_length=1,
+        ),
+    ] = None
+    bpm: Annotated[
+        int | None,
+        Field(
+            description="Beats per minute for the edit prompts; `0` or unset leaves it unset.",
+            ge=0,
+            le=2147483647,
+        ),
+    ] = None
+    keyscale: Annotated[
+        str | None,
+        Field(
+            description="Key and scale for the edit prompts, e.g. 'C minor'.",
+            min_length=1,
+        ),
+    ] = None
+    timesignature: Annotated[
+        str | None,
+        Field(
+            description="Time signature for the edit prompts, e.g. '4/4'.", min_length=1
+        ),
+    ] = None
+    augment_caption_with_metadata: Annotated[
+        bool | None,
+        Field(
+            alias="augmentCaptionWithMetadata",
+            description="Append BPM, time signature and key to each operation's conditioning caption (default: false).",
+        ),
+    ] = None
+    dcw_enabled: Annotated[
+        bool | None,
+        Field(
+            alias="dcwEnabled",
+            description="Repaint only: apply the Haar DCW sampler correction (default: true).",
+        ),
+    ] = None
+    dcw_scaler: Annotated[
+        float | None,
+        Field(
+            alias="dcwScaler",
+            description="Repaint only: DCW low-frequency correction strength (default: 0.05).",
+            ge=0.0,
+            le=3.4028234663852886e38,
+        ),
+    ] = None
+    dcw_high_scaler: Annotated[
+        float | None,
+        Field(
+            alias="dcwHighScaler",
+            description="Repaint only: DCW high-frequency correction strength (default: 0.02).",
+            ge=0.0,
+            le=3.4028234663852886e38,
+        ),
+    ] = None
+    inference_steps: Annotated[
+        int | None,
+        Field(
+            alias="inferenceSteps",
+            description="DiT steps for every operation, 0..1000; omit to keep the load-time `inferenceSteps`.",
+            ge=0,
+            le=1000,
+        ),
+    ] = None
+    shift: Annotated[
+        float | None,
+        Field(
+            description="DiT timestep shift for every operation; omit to keep the load-time `shift`.",
+            ge=0.0,
+            le=3.4028234663852886e38,
         ),
     ] = None
     source_audio: Annotated[
@@ -552,6 +736,15 @@ class AudioEditStreamRequest(GeneratedBaseModel):
             description="Recording to edit: a file path decoded server-side, or raw interleaved stereo 48 kHz Float32 LE PCM in [-1, 1].",
         ),
     ]
+    reference_audio: Annotated[
+        AudioEditStreamRequestReferenceAudioBase64
+        | AudioEditStreamRequestReferenceAudioFilePath
+        | None,
+        Field(
+            alias="referenceAudio",
+            description="Optional timbre reference for every operation: a file path decoded server-side, or raw interleaved stereo 48 kHz Float32 LE PCM.",
+        ),
+    ] = None
     type: Literal["audioEditStream"] = "audioEditStream"
     request_id: Annotated[str | None, Field(alias="requestId", min_length=1)] = None
 
@@ -575,6 +768,52 @@ class AudioEditStreamResponseProgress(GeneratedBaseModel):
 class AudioEditStreamResponseStopReason(Enum):
     completed = "completed"
     cancelled = "cancelled"
+
+
+class AudioEditStreamResponseStatsMetadata(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    caption: Annotated[
+        str,
+        Field(
+            description="The caption the run used: the LM-composed one under Simple Mode or Query Rewriting. With `augmentCaptionWithMetadata` it is always your own caption, before the metadata suffix. Empty for an edit, whose operations carry their own."
+        ),
+    ]
+    lyrics: Annotated[
+        str,
+        Field(description="The lyrics the run used (LM-written under Simple Mode)."),
+    ]
+    bpm: Annotated[float, Field(description="Beats per minute; 0 when unresolved.")]
+    keyscale: str
+    beats_per_bar: Annotated[
+        float,
+        Field(
+            alias="beatsPerBar",
+            description="Beats per bar, the time-signature numerator (4 for 4/4); 0 when unresolved.",
+        ),
+    ]
+    vocal_language: Annotated[str, Field(alias="vocalLanguage")]
+    seed: Annotated[
+        float,
+        Field(
+            description="The seed the run used: the engine-drawn one when none was passed, so the take can be replayed."
+        ),
+    ]
+    code_frames: Annotated[
+        float,
+        Field(
+            alias="codeFrames",
+            description="5 Hz semantic code frames the DiT was conditioned on; 0 when the LM and detokenizer are skipped (cover-nofsq, lego, edits).",
+        ),
+    ]
+    quality_report: Annotated[
+        str | None,
+        Field(
+            alias="qualityReport",
+            description="Per-condition breakdown of `qualityScore`. Present only when the run set `computeQualityScore`.",
+        ),
+    ] = None
 
 
 class AudioCode(RootModel[int]):
@@ -604,6 +843,12 @@ class AudioEditStreamResponseStatsUnderstand(GeneratedBaseModel):
             max_length=3000,
         ),
     ]
+    seed: Annotated[
+        float,
+        Field(
+            description="The seed the LM decode used: the engine-drawn one when none was passed, so the description can be reproduced."
+        ),
+    ]
 
 
 class AudioEditStreamResponseStats(GeneratedBaseModel):
@@ -615,6 +860,48 @@ class AudioEditStreamResponseStats(GeneratedBaseModel):
     real_time_factor: Annotated[float | None, Field(alias="realTimeFactor")] = None
     backend_device: Annotated[float | None, Field(alias="backendDevice")] = None
     backend_id: Annotated[float | None, Field(alias="backendId")] = None
+    emitted_frames: Annotated[
+        float | None,
+        Field(
+            alias="emittedFrames",
+            description="MiniMax only: semantic frames the autoregressive stage emitted (25 per second). Below the frame cap when the song ended at the model end-of-sequence.",
+        ),
+    ] = None
+    ar_ms: Annotated[
+        float | None,
+        Field(
+            alias="arMs",
+            description="MiniMax only: engine time in the autoregressive semantic stage, in ms.",
+        ),
+    ] = None
+    condition_ms: Annotated[
+        float | None,
+        Field(
+            alias="conditionMs",
+            description="MiniMax only: engine time building the flow conditioning, in ms.",
+        ),
+    ] = None
+    flow_ms: Annotated[
+        float | None,
+        Field(
+            alias="flowMs",
+            description="MiniMax only: engine time in the flow-matching DiT, in ms.",
+        ),
+    ] = None
+    vocoder_ms: Annotated[
+        float | None,
+        Field(
+            alias="vocoderMs",
+            description="MiniMax only: engine time in the vocoder, in ms.",
+        ),
+    ] = None
+    metadata: Annotated[
+        AudioEditStreamResponseStatsMetadata | None,
+        Field(
+            description="What an ACE-Step generation or edit rendered: the caption, lyrics and musical metadata after the LM filled in what was left unset, and the seed the run used. Absent for MiniMax and for `audioUnderstand()`.",
+            title="AudioEditStreamResponseStatsMetadata",
+        ),
+    ] = None
     lyrics_score: Annotated[
         float | None,
         Field(
@@ -832,11 +1119,25 @@ class AudioGenStreamRequest(GeneratedBaseModel):
     model_id: Annotated[str, Field(alias="modelId", min_length=1)]
     caption: Annotated[str, Field(min_length=1)]
     lyrics: str | None = None
-    seed: Annotated[int | None, Field(ge=-9007199254740991, le=9007199254740991)] = None
+    seed: Annotated[
+        int | None,
+        Field(
+            description="RNG seed; omit for a random one. An ACE-Step run reports the seed it used in `stats.metadata.seed`, so an unseeded take can be replayed.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
     vocal_language: Annotated[
         str | None, Field(alias="vocalLanguage", min_length=1)
     ] = None
-    bpm: Annotated[int | None, Field(gt=0, le=9007199254740991)] = None
+    bpm: Annotated[
+        int | None,
+        Field(
+            description="Beats per minute; `0` or unset lets the LM infer it. ACE-Step only.",
+            ge=0,
+            le=2147483647,
+        ),
+    ] = None
     keyscale: Annotated[str | None, Field(min_length=1)] = None
     timesignature: Annotated[str | None, Field(min_length=1)] = None
     augment_caption_with_metadata: Annotated[
@@ -916,9 +1217,17 @@ class AudioGenStreamRequest(GeneratedBaseModel):
         int | None,
         Field(
             alias="inferenceSteps",
-            description="MiniMax flow steps for this generation; 0 uses the engine default (20). MiniMax only; rejected by ACE-Step.",
+            description="Diffusion steps for this generation, 0..1000; omit to keep the load-time `inferenceSteps`. 0 is the engine default: MiniMax 20 flow steps, ACE-Step 8 on turbo DiTs and 50 on base/sft.",
             ge=0,
             le=1000,
+        ),
+    ] = None
+    shift: Annotated[
+        float | None,
+        Field(
+            description="DiT timestep shift for this generation; omit to keep the load-time `shift`. 0 is the engine default: 3.0 on turbo DiTs, 1.0 on base/sft. ACE-Step only; rejected by MiniMax.",
+            ge=0.0,
+            le=3.4028234663852886e38,
         ),
     ] = None
     cfg_scale: Annotated[
@@ -984,6 +1293,7 @@ class AudioGenStreamRequest(GeneratedBaseModel):
             alias="dcwScaler",
             description="DCW low-frequency correction strength (official default: 0.05).",
             ge=0.0,
+            le=3.4028234663852886e38,
         ),
     ] = None
     dcw_high_scaler: Annotated[
@@ -992,6 +1302,7 @@ class AudioGenStreamRequest(GeneratedBaseModel):
             alias="dcwHighScaler",
             description="DCW high-frequency correction strength (official default: 0.02).",
             ge=0.0,
+            le=3.4028234663852886e38,
         ),
     ] = None
     task_type: Annotated[
@@ -1072,6 +1383,52 @@ class AudioGenStreamResponseStopReason(Enum):
     cancelled = "cancelled"
 
 
+class AudioGenStreamResponseStatsMetadata(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    caption: Annotated[
+        str,
+        Field(
+            description="The caption the run used: the LM-composed one under Simple Mode or Query Rewriting. With `augmentCaptionWithMetadata` it is always your own caption, before the metadata suffix. Empty for an edit, whose operations carry their own."
+        ),
+    ]
+    lyrics: Annotated[
+        str,
+        Field(description="The lyrics the run used (LM-written under Simple Mode)."),
+    ]
+    bpm: Annotated[float, Field(description="Beats per minute; 0 when unresolved.")]
+    keyscale: str
+    beats_per_bar: Annotated[
+        float,
+        Field(
+            alias="beatsPerBar",
+            description="Beats per bar, the time-signature numerator (4 for 4/4); 0 when unresolved.",
+        ),
+    ]
+    vocal_language: Annotated[str, Field(alias="vocalLanguage")]
+    seed: Annotated[
+        float,
+        Field(
+            description="The seed the run used: the engine-drawn one when none was passed, so the take can be replayed."
+        ),
+    ]
+    code_frames: Annotated[
+        float,
+        Field(
+            alias="codeFrames",
+            description="5 Hz semantic code frames the DiT was conditioned on; 0 when the LM and detokenizer are skipped (cover-nofsq, lego, edits).",
+        ),
+    ]
+    quality_report: Annotated[
+        str | None,
+        Field(
+            alias="qualityReport",
+            description="Per-condition breakdown of `qualityScore`. Present only when the run set `computeQualityScore`.",
+        ),
+    ] = None
+
+
 class AudioGenStreamResponseStatsUnderstand(GeneratedBaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -1095,6 +1452,12 @@ class AudioGenStreamResponseStatsUnderstand(GeneratedBaseModel):
             max_length=3000,
         ),
     ]
+    seed: Annotated[
+        float,
+        Field(
+            description="The seed the LM decode used: the engine-drawn one when none was passed, so the description can be reproduced."
+        ),
+    ]
 
 
 class AudioGenStreamResponseStats(GeneratedBaseModel):
@@ -1106,6 +1469,48 @@ class AudioGenStreamResponseStats(GeneratedBaseModel):
     real_time_factor: Annotated[float | None, Field(alias="realTimeFactor")] = None
     backend_device: Annotated[float | None, Field(alias="backendDevice")] = None
     backend_id: Annotated[float | None, Field(alias="backendId")] = None
+    emitted_frames: Annotated[
+        float | None,
+        Field(
+            alias="emittedFrames",
+            description="MiniMax only: semantic frames the autoregressive stage emitted (25 per second). Below the frame cap when the song ended at the model end-of-sequence.",
+        ),
+    ] = None
+    ar_ms: Annotated[
+        float | None,
+        Field(
+            alias="arMs",
+            description="MiniMax only: engine time in the autoregressive semantic stage, in ms.",
+        ),
+    ] = None
+    condition_ms: Annotated[
+        float | None,
+        Field(
+            alias="conditionMs",
+            description="MiniMax only: engine time building the flow conditioning, in ms.",
+        ),
+    ] = None
+    flow_ms: Annotated[
+        float | None,
+        Field(
+            alias="flowMs",
+            description="MiniMax only: engine time in the flow-matching DiT, in ms.",
+        ),
+    ] = None
+    vocoder_ms: Annotated[
+        float | None,
+        Field(
+            alias="vocoderMs",
+            description="MiniMax only: engine time in the vocoder, in ms.",
+        ),
+    ] = None
+    metadata: Annotated[
+        AudioGenStreamResponseStatsMetadata | None,
+        Field(
+            description="What an ACE-Step generation or edit rendered: the caption, lyrics and musical metadata after the LM filled in what was left unset, and the seed the run used. Absent for MiniMax and for `audioUnderstand()`.",
+            title="AudioGenStreamResponseStatsMetadata",
+        ),
+    ] = None
     lyrics_score: Annotated[
         float | None,
         Field(
@@ -1383,11 +1788,63 @@ class AudioUnderstandResponseUnderstand(GeneratedBaseModel):
             max_length=3000,
         ),
     ]
+    seed: Annotated[
+        float,
+        Field(
+            description="The seed the LM decode used: the engine-drawn one when none was passed, so the description can be reproduced."
+        ),
+    ]
 
 
 class AudioUnderstandResponseStopReason(Enum):
     completed = "completed"
     cancelled = "cancelled"
+
+
+class AudioUnderstandResponseStatsMetadata(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    caption: Annotated[
+        str,
+        Field(
+            description="The caption the run used: the LM-composed one under Simple Mode or Query Rewriting. With `augmentCaptionWithMetadata` it is always your own caption, before the metadata suffix. Empty for an edit, whose operations carry their own."
+        ),
+    ]
+    lyrics: Annotated[
+        str,
+        Field(description="The lyrics the run used (LM-written under Simple Mode)."),
+    ]
+    bpm: Annotated[float, Field(description="Beats per minute; 0 when unresolved.")]
+    keyscale: str
+    beats_per_bar: Annotated[
+        float,
+        Field(
+            alias="beatsPerBar",
+            description="Beats per bar, the time-signature numerator (4 for 4/4); 0 when unresolved.",
+        ),
+    ]
+    vocal_language: Annotated[str, Field(alias="vocalLanguage")]
+    seed: Annotated[
+        float,
+        Field(
+            description="The seed the run used: the engine-drawn one when none was passed, so the take can be replayed."
+        ),
+    ]
+    code_frames: Annotated[
+        float,
+        Field(
+            alias="codeFrames",
+            description="5 Hz semantic code frames the DiT was conditioned on; 0 when the LM and detokenizer are skipped (cover-nofsq, lego, edits).",
+        ),
+    ]
+    quality_report: Annotated[
+        str | None,
+        Field(
+            alias="qualityReport",
+            description="Per-condition breakdown of `qualityScore`. Present only when the run set `computeQualityScore`.",
+        ),
+    ] = None
 
 
 class AudioUnderstandResponseStatsUnderstand(GeneratedBaseModel):
@@ -1413,6 +1870,12 @@ class AudioUnderstandResponseStatsUnderstand(GeneratedBaseModel):
             max_length=3000,
         ),
     ]
+    seed: Annotated[
+        float,
+        Field(
+            description="The seed the LM decode used: the engine-drawn one when none was passed, so the description can be reproduced."
+        ),
+    ]
 
 
 class AudioUnderstandResponseStats(GeneratedBaseModel):
@@ -1424,6 +1887,48 @@ class AudioUnderstandResponseStats(GeneratedBaseModel):
     real_time_factor: Annotated[float | None, Field(alias="realTimeFactor")] = None
     backend_device: Annotated[float | None, Field(alias="backendDevice")] = None
     backend_id: Annotated[float | None, Field(alias="backendId")] = None
+    emitted_frames: Annotated[
+        float | None,
+        Field(
+            alias="emittedFrames",
+            description="MiniMax only: semantic frames the autoregressive stage emitted (25 per second). Below the frame cap when the song ended at the model end-of-sequence.",
+        ),
+    ] = None
+    ar_ms: Annotated[
+        float | None,
+        Field(
+            alias="arMs",
+            description="MiniMax only: engine time in the autoregressive semantic stage, in ms.",
+        ),
+    ] = None
+    condition_ms: Annotated[
+        float | None,
+        Field(
+            alias="conditionMs",
+            description="MiniMax only: engine time building the flow conditioning, in ms.",
+        ),
+    ] = None
+    flow_ms: Annotated[
+        float | None,
+        Field(
+            alias="flowMs",
+            description="MiniMax only: engine time in the flow-matching DiT, in ms.",
+        ),
+    ] = None
+    vocoder_ms: Annotated[
+        float | None,
+        Field(
+            alias="vocoderMs",
+            description="MiniMax only: engine time in the vocoder, in ms.",
+        ),
+    ] = None
+    metadata: Annotated[
+        AudioUnderstandResponseStatsMetadata | None,
+        Field(
+            description="What an ACE-Step generation or edit rendered: the caption, lyrics and musical metadata after the LM filled in what was left unset, and the seed the run used. Absent for MiniMax and for `audioUnderstand()`.",
+            title="AudioUnderstandResponseStatsMetadata",
+        ),
+    ] = None
     lyrics_score: Annotated[
         float | None,
         Field(
@@ -1597,15 +2102,74 @@ class BatchCompletionStreamRequestPromptsItemHistoryItemAttachmentsItem(
     ]
 
 
+class BatchCompletionStreamRequestPromptsItemHistoryItemToolCallsItemArguments(
+    RootModel[dict[str, Any]]
+):
+    root: Annotated[
+        dict[str, Any],
+        Field(
+            description="Arguments the tool was called with.",
+            title="BatchCompletionStreamRequestPromptsItemHistoryItemToolCallsItemArguments",
+        ),
+    ]
+
+
+class BatchCompletionStreamRequestPromptsItemHistoryItemToolCallsItem(
+    GeneratedBaseModel
+):
+    id: Annotated[
+        str | None,
+        Field(description="Call id, echoed by the `tool` message that answers it."),
+    ] = None
+    name: Annotated[
+        str, Field(description="Name of the tool that was called.", min_length=1)
+    ]
+    arguments: Annotated[
+        BatchCompletionStreamRequestPromptsItemHistoryItemToolCallsItemArguments,
+        Field(
+            description="Arguments the tool was called with.",
+            title="BatchCompletionStreamRequestPromptsItemHistoryItemToolCallsItemArguments",
+        ),
+    ]
+
+
 class BatchCompletionStreamRequestPromptsItemHistoryItem(GeneratedBaseModel):
     role: Annotated[
         str,
-        Field(description='Message role (e.g., `"user"`, `"assistant"`, `"system"`).'),
+        Field(
+            description='Message role (e.g., `"user"`, `"assistant"`, `"system"`, `"tool"`).'
+        ),
     ]
-    content: Annotated[str, Field(description="Message content.")]
+    content: Annotated[
+        str | None,
+        Field(
+            description="Message content. May be `null` or omitted only on an `assistant` turn that carries `toolCalls`, as OpenAI histories send it; it then reads as an empty string."
+        ),
+    ] = None
     attachments: Annotated[
         list[BatchCompletionStreamRequestPromptsItemHistoryItemAttachmentsItem] | None,
         Field(description="Optional file attachments for multimodal models."),
+    ] = None
+    tool_calls: Annotated[
+        list[BatchCompletionStreamRequestPromptsItemHistoryItemToolCallsItem] | None,
+        Field(
+            alias="toolCalls",
+            description="Tool calls an `assistant` turn made. Rendered by llama.cpp-backed models' chat templates in their own tool-call format; `content` may be empty.",
+        ),
+    ] = None
+    tool_call_id: Annotated[
+        str | None,
+        Field(
+            alias="toolCallId",
+            description="On a `tool` turn: the id of the call this result answers.",
+        ),
+    ] = None
+    tool_name: Annotated[
+        str | None,
+        Field(
+            alias="toolName",
+            description="On a `tool` turn: the name of the tool that produced the result.",
+        ),
     ] = None
 
 
@@ -1650,12 +2214,6 @@ class BatchCompletionStreamRequestPromptsItemGenerationParams(GeneratedBaseModel
             le=2147483647,
         ),
     ] = None
-    remove_thinking_from_context: Annotated[
-        bool | None,
-        Field(
-            description="When the model emits a reasoning block during generation (e.g. `<think>...</think>` for the Qwen3 family, `<|channel>thought ... <channel|>` for Gemma 4), drop those tokens from the KV cache at end-of-generation so subsequent turns do not accumulate reasoning history. Defaults to `false`, except the Qwen3 reasoning family (Qwen3, Qwen3.5, Qwen3.6, including MoE variants), which defaults to `true`. No-op for models without a recognised reasoning channel. Supported on recurrent / hybrid-SSM models (e.g. Qwen3.5) via a state snapshot and replay when the reasoning close marker is a single token; on such a model with a multi-token close marker, enabling this fails with an error."
-        ),
-    ] = None
     tool_choice: Annotated[
         str | None,
         Field(
@@ -1666,7 +2224,7 @@ class BatchCompletionStreamRequestPromptsItemGenerationParams(GeneratedBaseModel
     parallel_tool_calls: Annotated[
         bool | None,
         Field(
-            description="Whether one response may carry more than one tool call. `true` lets the chat template and tool-call grammar accept several; unset or `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
+            description="Whether one response may carry more than one tool call. `true` (default) lets the chat template and tool-call grammar accept several; `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
         ),
     ] = None
 
@@ -2088,6 +2646,10 @@ class BatchCompletionStreamResponseEventsItemEventCompletionStatsStats(
     tool_definitions_dropped: Annotated[
         float | None, Field(alias="toolDefinitionsDropped")
     ] = None
+    draft_tokens: Annotated[float | None, Field(alias="draftTokens")] = None
+    draft_accepted_tokens: Annotated[
+        float | None, Field(alias="draftAcceptedTokens")
+    ] = None
     backend_device: Annotated[
         BatchCompletionStreamResponseEventsItemEventCompletionStatsStatsBackendDevice
         | None,
@@ -2222,6 +2784,10 @@ class BatchCompletionStreamResponseStats(GeneratedBaseModel):
     avg_concurrent_seq: Annotated[float | None, Field(alias="avgConcurrentSeq")] = None
     tool_definitions_dropped: Annotated[
         float | None, Field(alias="toolDefinitionsDropped")
+    ] = None
+    draft_tokens: Annotated[float | None, Field(alias="draftTokens")] = None
+    draft_accepted_tokens: Annotated[
+        float | None, Field(alias="draftAcceptedTokens")
     ] = None
     backend_device: Annotated[
         BatchCompletionStreamResponseStatsBackendDevice | None,
@@ -2396,6 +2962,15 @@ class BciTranscribeResponseStats(GeneratedBaseModel):
     ] = None
 
 
+class BciTranscribeResponseSegmentSpeakerSegmentsItem(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    speaker_id: Annotated[int, Field(alias="speakerId", ge=0, le=9007199254740991)]
+    start_ms: Annotated[float, Field(alias="startMs", ge=0.0)]
+    end_ms: Annotated[float, Field(alias="endMs", ge=0.0)]
+
+
 class BciTranscribeResponseSegment(GeneratedBaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -2405,6 +2980,25 @@ class BciTranscribeResponseSegment(GeneratedBaseModel):
     end_ms: Annotated[float, Field(alias="endMs")]
     append: bool
     id: float
+    speaker_id: Annotated[
+        int | None,
+        Field(
+            alias="speakerId",
+            description="Zero-based speaker id for diarized transcription.",
+            ge=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    speaker: Annotated[
+        str | None, Field(description="MOSS speaker label, such as S01.")
+    ] = None
+    speaker_segments: Annotated[
+        list[BciTranscribeResponseSegmentSpeakerSegmentsItem] | None,
+        Field(
+            alias="speakerSegments",
+            description="Offline Sortformer/Nemotron diarization turns, with zero-based speaker ids and millisecond timestamps. Turns may overlap.",
+        ),
+    ] = None
     is_end_of_turn: Annotated[
         bool | None,
         Field(
@@ -2711,6 +3305,15 @@ class BciTranscribeStreamResponseStats(GeneratedBaseModel):
     ] = None
 
 
+class BciTranscribeStreamResponseSegmentSpeakerSegmentsItem(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    speaker_id: Annotated[int, Field(alias="speakerId", ge=0, le=9007199254740991)]
+    start_ms: Annotated[float, Field(alias="startMs", ge=0.0)]
+    end_ms: Annotated[float, Field(alias="endMs", ge=0.0)]
+
+
 class BciTranscribeStreamResponseSegment(GeneratedBaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -2720,6 +3323,25 @@ class BciTranscribeStreamResponseSegment(GeneratedBaseModel):
     end_ms: Annotated[float, Field(alias="endMs")]
     append: bool
     id: float
+    speaker_id: Annotated[
+        int | None,
+        Field(
+            alias="speakerId",
+            description="Zero-based speaker id for diarized transcription.",
+            ge=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    speaker: Annotated[
+        str | None, Field(description="MOSS speaker label, such as S01.")
+    ] = None
+    speaker_segments: Annotated[
+        list[BciTranscribeStreamResponseSegmentSpeakerSegmentsItem] | None,
+        Field(
+            alias="speakerSegments",
+            description="Offline Sortformer/Nemotron diarization turns, with zero-based speaker ids and millisecond timestamps. Turns may overlap.",
+        ),
+    ] = None
     is_end_of_turn: Annotated[
         bool | None,
         Field(
@@ -2789,6 +3411,8 @@ class CancelRequestBroadKind(Enum):
     completion = "completion"
     batch_completion = "batchCompletion"
     embeddings = "embeddings"
+    decision = "decision"
+    rerank = "rerank"
     transcribe = "transcribe"
     translate = "translate"
     diffusion = "diffusion"
@@ -2877,15 +3501,72 @@ class CompletionOrchestrateRequestHistoryItemAttachmentsItem(GeneratedBaseModel)
     ]
 
 
+class CompletionOrchestrateRequestHistoryItemToolCallsItemArguments(
+    RootModel[dict[str, Any]]
+):
+    root: Annotated[
+        dict[str, Any],
+        Field(
+            description="Arguments the tool was called with.",
+            title="CompletionOrchestrateRequestHistoryItemToolCallsItemArguments",
+        ),
+    ]
+
+
+class CompletionOrchestrateRequestHistoryItemToolCallsItem(GeneratedBaseModel):
+    id: Annotated[
+        str | None,
+        Field(description="Call id, echoed by the `tool` message that answers it."),
+    ] = None
+    name: Annotated[
+        str, Field(description="Name of the tool that was called.", min_length=1)
+    ]
+    arguments: Annotated[
+        CompletionOrchestrateRequestHistoryItemToolCallsItemArguments,
+        Field(
+            description="Arguments the tool was called with.",
+            title="CompletionOrchestrateRequestHistoryItemToolCallsItemArguments",
+        ),
+    ]
+
+
 class CompletionOrchestrateRequestHistoryItem(GeneratedBaseModel):
     role: Annotated[
         str,
-        Field(description='Message role (e.g., `"user"`, `"assistant"`, `"system"`).'),
+        Field(
+            description='Message role (e.g., `"user"`, `"assistant"`, `"system"`, `"tool"`).'
+        ),
     ]
-    content: Annotated[str, Field(description="Message content.")]
+    content: Annotated[
+        str | None,
+        Field(
+            description="Message content. May be `null` or omitted only on an `assistant` turn that carries `toolCalls`, as OpenAI histories send it; it then reads as an empty string."
+        ),
+    ] = None
     attachments: Annotated[
         list[CompletionOrchestrateRequestHistoryItemAttachmentsItem] | None,
         Field(description="Optional file attachments for multimodal models."),
+    ] = None
+    tool_calls: Annotated[
+        list[CompletionOrchestrateRequestHistoryItemToolCallsItem] | None,
+        Field(
+            alias="toolCalls",
+            description="Tool calls an `assistant` turn made. Rendered by llama.cpp-backed models' chat templates in their own tool-call format; `content` may be empty.",
+        ),
+    ] = None
+    tool_call_id: Annotated[
+        str | None,
+        Field(
+            alias="toolCallId",
+            description="On a `tool` turn: the id of the call this result answers.",
+        ),
+    ] = None
+    tool_name: Annotated[
+        str | None,
+        Field(
+            alias="toolName",
+            description="On a `tool` turn: the name of the tool that produced the result.",
+        ),
     ] = None
 
 
@@ -3025,12 +3706,6 @@ class CompletionOrchestrateRequestGenerationParams(GeneratedBaseModel):
             le=2147483647,
         ),
     ] = None
-    remove_thinking_from_context: Annotated[
-        bool | None,
-        Field(
-            description="When the model emits a reasoning block during generation (e.g. `<think>...</think>` for the Qwen3 family, `<|channel>thought ... <channel|>` for Gemma 4), drop those tokens from the KV cache at end-of-generation so subsequent turns do not accumulate reasoning history. Defaults to `false`, except the Qwen3 reasoning family (Qwen3, Qwen3.5, Qwen3.6, including MoE variants), which defaults to `true`. No-op for models without a recognised reasoning channel. Supported on recurrent / hybrid-SSM models (e.g. Qwen3.5) via a state snapshot and replay when the reasoning close marker is a single token; on such a model with a multi-token close marker, enabling this fails with an error."
-        ),
-    ] = None
     tool_choice: Annotated[
         str | None,
         Field(
@@ -3041,7 +3716,7 @@ class CompletionOrchestrateRequestGenerationParams(GeneratedBaseModel):
     parallel_tool_calls: Annotated[
         bool | None,
         Field(
-            description="Whether one response may carry more than one tool call. `true` lets the chat template and tool-call grammar accept several; unset or `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
+            description="Whether one response may carry more than one tool call. `true` (default) lets the chat template and tool-call grammar accept several; `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
         ),
     ] = None
 
@@ -3141,6 +3816,12 @@ class CompletionOrchestrateRequest(GeneratedBaseModel):
         ),
     ]
     kv_cache: Annotated[bool | KvCache | None, Field(alias="kvCache")] = None
+    prefill: Annotated[
+        bool | None,
+        Field(
+            description="Evaluate the prompt without generating an answer. Requires an enabled KV cache."
+        ),
+    ] = None
     tools: Annotated[
         list[CompletionOrchestrateRequestToolsItem] | None,
         Field(
@@ -3179,7 +3860,7 @@ class CompletionOrchestrateRequest(GeneratedBaseModel):
         CompletionOrchestrateRequestToolDialect | None,
         Field(
             alias="toolDialect",
-            description="Override auto-detected tool-call dialect. Use when name-based detection picks the wrong parser chain for your model.",
+            description="Override auto-detected tool-call dialect. Use when detection from the model name and GGUF architecture picks the wrong parser chain for your model.",
             title="CompletionOrchestrateRequestToolDialect",
         ),
     ] = None
@@ -3325,6 +4006,10 @@ class CompletionOrchestrateResponseEventsItemCompletionStatsStats(GeneratedBaseM
     avg_concurrent_seq: Annotated[float | None, Field(alias="avgConcurrentSeq")] = None
     tool_definitions_dropped: Annotated[
         float | None, Field(alias="toolDefinitionsDropped")
+    ] = None
+    draft_tokens: Annotated[float | None, Field(alias="draftTokens")] = None
+    draft_accepted_tokens: Annotated[
+        float | None, Field(alias="draftAcceptedTokens")
     ] = None
     backend_device: Annotated[
         CompletionOrchestrateResponseEventsItemCompletionStatsStatsBackendDevice | None,
@@ -3480,15 +4165,72 @@ class CompletionStreamRequestHistoryItemAttachmentsItem(GeneratedBaseModel):
     ]
 
 
+class CompletionStreamRequestHistoryItemToolCallsItemArguments(
+    RootModel[dict[str, Any]]
+):
+    root: Annotated[
+        dict[str, Any],
+        Field(
+            description="Arguments the tool was called with.",
+            title="CompletionStreamRequestHistoryItemToolCallsItemArguments",
+        ),
+    ]
+
+
+class CompletionStreamRequestHistoryItemToolCallsItem(GeneratedBaseModel):
+    id: Annotated[
+        str | None,
+        Field(description="Call id, echoed by the `tool` message that answers it."),
+    ] = None
+    name: Annotated[
+        str, Field(description="Name of the tool that was called.", min_length=1)
+    ]
+    arguments: Annotated[
+        CompletionStreamRequestHistoryItemToolCallsItemArguments,
+        Field(
+            description="Arguments the tool was called with.",
+            title="CompletionStreamRequestHistoryItemToolCallsItemArguments",
+        ),
+    ]
+
+
 class CompletionStreamRequestHistoryItem(GeneratedBaseModel):
     role: Annotated[
         str,
-        Field(description='Message role (e.g., `"user"`, `"assistant"`, `"system"`).'),
+        Field(
+            description='Message role (e.g., `"user"`, `"assistant"`, `"system"`, `"tool"`).'
+        ),
     ]
-    content: Annotated[str, Field(description="Message content.")]
+    content: Annotated[
+        str | None,
+        Field(
+            description="Message content. May be `null` or omitted only on an `assistant` turn that carries `toolCalls`, as OpenAI histories send it; it then reads as an empty string."
+        ),
+    ] = None
     attachments: Annotated[
         list[CompletionStreamRequestHistoryItemAttachmentsItem] | None,
         Field(description="Optional file attachments for multimodal models."),
+    ] = None
+    tool_calls: Annotated[
+        list[CompletionStreamRequestHistoryItemToolCallsItem] | None,
+        Field(
+            alias="toolCalls",
+            description="Tool calls an `assistant` turn made. Rendered by llama.cpp-backed models' chat templates in their own tool-call format; `content` may be empty.",
+        ),
+    ] = None
+    tool_call_id: Annotated[
+        str | None,
+        Field(
+            alias="toolCallId",
+            description="On a `tool` turn: the id of the call this result answers.",
+        ),
+    ] = None
+    tool_name: Annotated[
+        str | None,
+        Field(
+            alias="toolName",
+            description="On a `tool` turn: the name of the tool that produced the result.",
+        ),
     ] = None
 
 
@@ -3622,12 +4364,6 @@ class CompletionStreamRequestGenerationParams(GeneratedBaseModel):
             le=2147483647,
         ),
     ] = None
-    remove_thinking_from_context: Annotated[
-        bool | None,
-        Field(
-            description="When the model emits a reasoning block during generation (e.g. `<think>...</think>` for the Qwen3 family, `<|channel>thought ... <channel|>` for Gemma 4), drop those tokens from the KV cache at end-of-generation so subsequent turns do not accumulate reasoning history. Defaults to `false`, except the Qwen3 reasoning family (Qwen3, Qwen3.5, Qwen3.6, including MoE variants), which defaults to `true`. No-op for models without a recognised reasoning channel. Supported on recurrent / hybrid-SSM models (e.g. Qwen3.5) via a state snapshot and replay when the reasoning close marker is a single token; on such a model with a multi-token close marker, enabling this fails with an error."
-        ),
-    ] = None
     tool_choice: Annotated[
         str | None,
         Field(
@@ -3638,7 +4374,7 @@ class CompletionStreamRequestGenerationParams(GeneratedBaseModel):
     parallel_tool_calls: Annotated[
         bool | None,
         Field(
-            description="Whether one response may carry more than one tool call. `true` lets the chat template and tool-call grammar accept several; unset or `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
+            description="Whether one response may carry more than one tool call. `true` (default) lets the chat template and tool-call grammar accept several; `false` keeps one. Only honoured by llama.cpp-backed models; other backends ignore it."
         ),
     ] = None
 
@@ -3736,6 +4472,12 @@ class CompletionStreamRequest(GeneratedBaseModel):
         ),
     ]
     kv_cache: Annotated[bool | KvCache | None, Field(alias="kvCache")] = None
+    prefill: Annotated[
+        bool | None,
+        Field(
+            description="Evaluate the prompt without generating an answer. Requires an enabled KV cache."
+        ),
+    ] = None
     tools: Annotated[
         list[CompletionStreamRequestToolsItem] | None,
         Field(
@@ -3774,7 +4516,7 @@ class CompletionStreamRequest(GeneratedBaseModel):
         CompletionStreamRequestToolDialect | None,
         Field(
             alias="toolDialect",
-            description="Override auto-detected tool-call dialect. Use when name-based detection picks the wrong parser chain for your model.",
+            description="Override auto-detected tool-call dialect. Use when detection from the model name and GGUF architecture picks the wrong parser chain for your model.",
             title="CompletionStreamRequestToolDialect",
         ),
     ] = None
@@ -3911,6 +4653,10 @@ class CompletionStreamResponseEventsItemCompletionStatsStats(GeneratedBaseModel)
     avg_concurrent_seq: Annotated[float | None, Field(alias="avgConcurrentSeq")] = None
     tool_definitions_dropped: Annotated[
         float | None, Field(alias="toolDefinitionsDropped")
+    ] = None
+    draft_tokens: Annotated[float | None, Field(alias="draftTokens")] = None
+    draft_accepted_tokens: Annotated[
+        float | None, Field(alias="draftAcceptedTokens")
     ] = None
     backend_device: Annotated[
         CompletionStreamResponseEventsItemCompletionStatsStatsBackendDevice | None,
@@ -4057,10 +4803,13 @@ class ModelType(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -4071,8 +4820,11 @@ class ModelType(Enum):
 class PluginId(Enum):
     llm = "@qvac/sdk/llamacpp-completion/plugin"
     embedding = "@qvac/sdk/llamacpp-embedding/plugin"
+    decision = "@qvac/sdk/llamacpp-decision/plugin"
+    rerank = "@qvac/sdk/llamacpp-rerank/plugin"
     whisper = "@qvac/sdk/whispercpp-transcription/plugin"
     bci = "@qvac/sdk/bci-whispercpp-transcription/plugin"
+    moss_transcribe = "@qvac/sdk/moss-transcribe/plugin"
     nmt = "@qvac/sdk/nmtcpp-translation/plugin"
     tts = "@qvac/sdk/tts-ggml/plugin"
     ocr = "@qvac/sdk/ggml-ocr/plugin"
@@ -4162,6 +4914,8 @@ class TtsEngine(Enum):
     cosyvoice3 = "cosyvoice3"
     audio8 = "audio8"
     moss = "moss"
+    moss_sfx = "moss-sfx"
+    moss_speech = "moss-speech"
 
 
 class TtsPace(Enum):
@@ -4238,6 +4992,843 @@ class Verbosity(Enum):
     warn = 1
     info = 2
     debug = 3
+
+
+class DecideSingleRequestQuestionsValueChoiceInstructions(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any],
+        Field(title="DecideSingleRequestQuestionsValueChoiceInstructions"),
+    ]
+
+
+class OptionOrderItem(RootModel[int]):
+    root: Annotated[int, Field(ge=0, le=9007199254740991)]
+
+
+class DecideSingleRequestQuestionsValueChoiceCriteriaValue(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any],
+        Field(title="DecideSingleRequestQuestionsValueChoiceCriteriaValue"),
+    ]
+
+
+class DecideSingleRequestQuestionsValueChoiceCriteria(
+    RootModel[
+        dict[
+            str,
+            str
+            | float
+            | bool
+            | DecideSingleRequestQuestionsValueChoiceCriteriaValue
+            | list[Any]
+            | None,
+        ]
+    ]
+):
+    root: Annotated[
+        dict[
+            str,
+            str
+            | float
+            | bool
+            | DecideSingleRequestQuestionsValueChoiceCriteriaValue
+            | list[Any]
+            | None,
+        ],
+        Field(title="DecideSingleRequestQuestionsValueChoiceCriteria"),
+    ]
+
+
+class DecideSingleRequestQuestionsValueChoice(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    instructions: (
+        str
+        | float
+        | bool
+        | DecideSingleRequestQuestionsValueChoiceInstructions
+        | list[Any]
+    )
+    option_order: Annotated[
+        list[OptionOrderItem] | None, Field(alias="optionOrder")
+    ] = None
+    type: Literal["choice"] = "choice"
+    criteria: list[str | float | bool] | DecideSingleRequestQuestionsValueChoiceCriteria
+
+
+class DecideSingleRequestQuestionsValueScoreInstructions(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any],
+        Field(title="DecideSingleRequestQuestionsValueScoreInstructions"),
+    ]
+
+
+class DecideSingleRequestQuestionsValueScoreCriteriaItem(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any],
+        Field(title="DecideSingleRequestQuestionsValueScoreCriteriaItem"),
+    ]
+
+
+class DecideSingleRequestQuestionsValueScore(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    instructions: (
+        str
+        | float
+        | bool
+        | DecideSingleRequestQuestionsValueScoreInstructions
+        | list[Any]
+    )
+    option_order: Annotated[
+        list[OptionOrderItem] | None, Field(alias="optionOrder")
+    ] = None
+    type: Literal["score"] = "score"
+    criteria: list[
+        str
+        | float
+        | bool
+        | DecideSingleRequestQuestionsValueScoreCriteriaItem
+        | list[Any]
+    ]
+
+
+class DecideSingleRequestQuestionsValueNoulInstructions(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any], Field(title="DecideSingleRequestQuestionsValueNoulInstructions")
+    ]
+
+
+class DecideSingleRequestQuestionsValueNoulCriteriaTrue(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any], Field(title="DecideSingleRequestQuestionsValueNoulCriteriaTrue")
+    ]
+
+
+class DecideSingleRequestQuestionsValueNoulCriteriaFalse(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any],
+        Field(title="DecideSingleRequestQuestionsValueNoulCriteriaFalse"),
+    ]
+
+
+class DecideSingleRequestQuestionsValueNoulCriteria(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    true: (
+        str
+        | float
+        | bool
+        | DecideSingleRequestQuestionsValueNoulCriteriaTrue
+        | list[Any]
+        | None
+    ) = None
+    false: (
+        str
+        | float
+        | bool
+        | DecideSingleRequestQuestionsValueNoulCriteriaFalse
+        | list[Any]
+        | None
+    ) = None
+
+
+class DecideSingleRequestQuestionsValueNoulLabels(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    false: str
+    true: str
+
+
+class DecideSingleRequestQuestionsValueNoul(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    instructions: (
+        str
+        | float
+        | bool
+        | DecideSingleRequestQuestionsValueNoulInstructions
+        | list[Any]
+    )
+    option_order: Annotated[
+        list[OptionOrderItem] | None, Field(alias="optionOrder")
+    ] = None
+    type: Literal["noul"] = "noul"
+    criteria: DecideSingleRequestQuestionsValueNoulCriteria | None = None
+    labels: Annotated[
+        DecideSingleRequestQuestionsValueNoulLabels | None,
+        Field(title="DecideSingleRequestQuestionsValueNoulLabels"),
+    ] = None
+
+
+class DecideSingleRequestQuestions(
+    RootModel[
+        dict[
+            str,
+            DecideSingleRequestQuestionsValueChoice
+            | DecideSingleRequestQuestionsValueScore
+            | DecideSingleRequestQuestionsValueNoul,
+        ]
+    ]
+):
+    root: Annotated[
+        dict[
+            str,
+            DecideSingleRequestQuestionsValueChoice
+            | DecideSingleRequestQuestionsValueScore
+            | DecideSingleRequestQuestionsValueNoul,
+        ],
+        Field(
+            description="Question ID to decision question.",
+            title="DecideSingleRequestQuestions",
+        ),
+    ]
+
+
+class DecideSingleRequestState(RootModel[dict[str, Any]]):
+    root: Annotated[dict[str, Any], Field(title="DecideSingleRequestState")]
+
+
+class DecideSingleRequest(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    questions: Annotated[
+        DecideSingleRequestQuestions,
+        Field(
+            description="Question ID to decision question.",
+            title="DecideSingleRequestQuestions",
+        ),
+    ]
+    max_len: Annotated[
+        int | None,
+        Field(
+            alias="maxLen",
+            description="Token budget per sequence; unset uses the checkpoint budget.",
+            gt=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    head_max_len: Annotated[
+        int | None,
+        Field(
+            alias="headMaxLen",
+            description="Token budget for each question and its options; unset uses the checkpoint budget.",
+            gt=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    state: str | float | bool | DecideSingleRequestState | list[Any]
+    model_id: Annotated[str, Field(alias="modelId", min_length=1)]
+    type: Literal["decide"] = "decide"
+    request_id: Annotated[str | None, Field(alias="requestId", min_length=1)] = None
+
+
+class DecideBatchRequestQuestionsValueChoiceInstructions(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any],
+        Field(title="DecideBatchRequestQuestionsValueChoiceInstructions"),
+    ]
+
+
+class DecideBatchRequestQuestionsValueChoiceCriteriaValue(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any],
+        Field(title="DecideBatchRequestQuestionsValueChoiceCriteriaValue"),
+    ]
+
+
+class DecideBatchRequestQuestionsValueChoiceCriteria(
+    RootModel[
+        dict[
+            str,
+            str
+            | float
+            | bool
+            | DecideBatchRequestQuestionsValueChoiceCriteriaValue
+            | list[Any]
+            | None,
+        ]
+    ]
+):
+    root: Annotated[
+        dict[
+            str,
+            str
+            | float
+            | bool
+            | DecideBatchRequestQuestionsValueChoiceCriteriaValue
+            | list[Any]
+            | None,
+        ],
+        Field(title="DecideBatchRequestQuestionsValueChoiceCriteria"),
+    ]
+
+
+class DecideBatchRequestQuestionsValueChoice(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    instructions: (
+        str
+        | float
+        | bool
+        | DecideBatchRequestQuestionsValueChoiceInstructions
+        | list[Any]
+    )
+    option_order: Annotated[
+        list[OptionOrderItem] | None, Field(alias="optionOrder")
+    ] = None
+    type: Literal["choice"] = "choice"
+    criteria: list[str | float | bool] | DecideBatchRequestQuestionsValueChoiceCriteria
+
+
+class DecideBatchRequestQuestionsValueScoreInstructions(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any], Field(title="DecideBatchRequestQuestionsValueScoreInstructions")
+    ]
+
+
+class DecideBatchRequestQuestionsValueScoreCriteriaItem(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any], Field(title="DecideBatchRequestQuestionsValueScoreCriteriaItem")
+    ]
+
+
+class DecideBatchRequestQuestionsValueScore(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    instructions: (
+        str
+        | float
+        | bool
+        | DecideBatchRequestQuestionsValueScoreInstructions
+        | list[Any]
+    )
+    option_order: Annotated[
+        list[OptionOrderItem] | None, Field(alias="optionOrder")
+    ] = None
+    type: Literal["score"] = "score"
+    criteria: list[
+        str
+        | float
+        | bool
+        | DecideBatchRequestQuestionsValueScoreCriteriaItem
+        | list[Any]
+    ]
+
+
+class DecideBatchRequestQuestionsValueNoulInstructions(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any], Field(title="DecideBatchRequestQuestionsValueNoulInstructions")
+    ]
+
+
+class DecideBatchRequestQuestionsValueNoulCriteriaTrue(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any], Field(title="DecideBatchRequestQuestionsValueNoulCriteriaTrue")
+    ]
+
+
+class DecideBatchRequestQuestionsValueNoulCriteriaFalse(RootModel[dict[str, Any]]):
+    root: Annotated[
+        dict[str, Any], Field(title="DecideBatchRequestQuestionsValueNoulCriteriaFalse")
+    ]
+
+
+class DecideBatchRequestQuestionsValueNoulCriteria(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    true: (
+        str
+        | float
+        | bool
+        | DecideBatchRequestQuestionsValueNoulCriteriaTrue
+        | list[Any]
+        | None
+    ) = None
+    false: (
+        str
+        | float
+        | bool
+        | DecideBatchRequestQuestionsValueNoulCriteriaFalse
+        | list[Any]
+        | None
+    ) = None
+
+
+class DecideBatchRequestQuestionsValueNoulLabels(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    false: str
+    true: str
+
+
+class DecideBatchRequestQuestionsValueNoul(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    instructions: (
+        str
+        | float
+        | bool
+        | DecideBatchRequestQuestionsValueNoulInstructions
+        | list[Any]
+    )
+    option_order: Annotated[
+        list[OptionOrderItem] | None, Field(alias="optionOrder")
+    ] = None
+    type: Literal["noul"] = "noul"
+    criteria: DecideBatchRequestQuestionsValueNoulCriteria | None = None
+    labels: Annotated[
+        DecideBatchRequestQuestionsValueNoulLabels | None,
+        Field(title="DecideBatchRequestQuestionsValueNoulLabels"),
+    ] = None
+
+
+class DecideBatchRequestQuestions(
+    RootModel[
+        dict[
+            str,
+            DecideBatchRequestQuestionsValueChoice
+            | DecideBatchRequestQuestionsValueScore
+            | DecideBatchRequestQuestionsValueNoul,
+        ]
+    ]
+):
+    root: Annotated[
+        dict[
+            str,
+            DecideBatchRequestQuestionsValueChoice
+            | DecideBatchRequestQuestionsValueScore
+            | DecideBatchRequestQuestionsValueNoul,
+        ],
+        Field(
+            description="Question ID to decision question.",
+            title="DecideBatchRequestQuestions",
+        ),
+    ]
+
+
+class DecideBatchRequestStatesItem(RootModel[dict[str, Any]]):
+    root: Annotated[dict[str, Any], Field(title="DecideBatchRequestStatesItem")]
+
+
+class DecideBatchRequest(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    questions: Annotated[
+        DecideBatchRequestQuestions,
+        Field(
+            description="Question ID to decision question.",
+            title="DecideBatchRequestQuestions",
+        ),
+    ]
+    max_len: Annotated[
+        int | None,
+        Field(
+            alias="maxLen",
+            description="Token budget per sequence; unset uses the checkpoint budget.",
+            gt=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    head_max_len: Annotated[
+        int | None,
+        Field(
+            alias="headMaxLen",
+            description="Token budget for each question and its options; unset uses the checkpoint budget.",
+            gt=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    states: list[str | float | bool | DecideBatchRequestStatesItem | list[Any]]
+    model_id: Annotated[str, Field(alias="modelId", min_length=1)]
+    type: Literal["decide"] = "decide"
+    request_id: Annotated[str | None, Field(alias="requestId", min_length=1)] = None
+
+
+class DecideResponseResultAnswersValueChoiceAction(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    act_probability: Annotated[
+        float,
+        Field(
+            alias="actProbability",
+            description="Currently unreliable; do not use to trigger actions.",
+        ),
+    ]
+
+
+class DecideResponseResultAnswersValueChoiceProbabilities(RootModel[dict[str, float]]):
+    root: Annotated[
+        dict[str, float],
+        Field(title="DecideResponseResultAnswersValueChoiceProbabilities"),
+    ]
+
+
+class DecideResponseResultAnswersValueChoice(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    answer_confidence: Annotated[float, Field(alias="answerConfidence")]
+    confidence: float
+    action: Annotated[
+        DecideResponseResultAnswersValueChoiceAction,
+        Field(title="DecideResponseResultAnswersValueChoiceAction"),
+    ]
+    type: Literal["choice"] = "choice"
+    choice: str | float | bool
+    probabilities: Annotated[
+        DecideResponseResultAnswersValueChoiceProbabilities,
+        Field(title="DecideResponseResultAnswersValueChoiceProbabilities"),
+    ]
+
+
+class DecideResponseResultAnswersValueScoreAction(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    act_probability: Annotated[
+        float,
+        Field(
+            alias="actProbability",
+            description="Currently unreliable; do not use to trigger actions.",
+        ),
+    ]
+
+
+class DecideResponseResultAnswersValueScoreLegend(RootModel[dict[str, str]]):
+    root: Annotated[
+        dict[str, str], Field(title="DecideResponseResultAnswersValueScoreLegend")
+    ]
+
+
+class DecideResponseResultAnswersValueScoreProbabilities(RootModel[dict[str, float]]):
+    root: Annotated[
+        dict[str, float],
+        Field(title="DecideResponseResultAnswersValueScoreProbabilities"),
+    ]
+
+
+class DecideResponseResultAnswersValueScore(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    answer_confidence: Annotated[float, Field(alias="answerConfidence")]
+    confidence: float
+    action: Annotated[
+        DecideResponseResultAnswersValueScoreAction,
+        Field(title="DecideResponseResultAnswersValueScoreAction"),
+    ]
+    type: Literal["score"] = "score"
+    score: float
+    legend: Annotated[
+        DecideResponseResultAnswersValueScoreLegend,
+        Field(title="DecideResponseResultAnswersValueScoreLegend"),
+    ]
+    probabilities: Annotated[
+        DecideResponseResultAnswersValueScoreProbabilities,
+        Field(title="DecideResponseResultAnswersValueScoreProbabilities"),
+    ]
+
+
+class DecideResponseResultAnswersValueNoulAction(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    act_probability: Annotated[
+        float,
+        Field(
+            alias="actProbability",
+            description="Currently unreliable; do not use to trigger actions.",
+        ),
+    ]
+
+
+class DecideResponseResultAnswersValueNoul(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    answer_confidence: Annotated[float, Field(alias="answerConfidence")]
+    confidence: float
+    action: Annotated[
+        DecideResponseResultAnswersValueNoulAction,
+        Field(title="DecideResponseResultAnswersValueNoulAction"),
+    ]
+    type: Literal["noul"] = "noul"
+    noul: float
+
+
+class DecideResponseResultAnswers(
+    RootModel[
+        dict[
+            str,
+            DecideResponseResultAnswersValueChoice
+            | DecideResponseResultAnswersValueScore
+            | DecideResponseResultAnswersValueNoul,
+        ]
+    ]
+):
+    root: Annotated[
+        dict[
+            str,
+            DecideResponseResultAnswersValueChoice
+            | DecideResponseResultAnswersValueScore
+            | DecideResponseResultAnswersValueNoul,
+        ],
+        Field(title="DecideResponseResultAnswers"),
+    ]
+
+
+class DecideResponseResultUsageOptionsValue(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    total: float
+    distinct: float
+    tokens_per_option: Annotated[float | None, Field(alias="tokensPerOption")]
+
+
+class DecideResponseResultUsageOptions(
+    RootModel[dict[str, DecideResponseResultUsageOptionsValue]]
+):
+    root: Annotated[
+        dict[str, DecideResponseResultUsageOptionsValue],
+        Field(title="DecideResponseResultUsageOptions"),
+    ]
+
+
+class DecideResponseResultUsage(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    input_tokens: Annotated[float, Field(alias="inputTokens")]
+    output_tokens: Annotated[float, Field(alias="outputTokens")]
+    state_tokens: Annotated[float, Field(alias="stateTokens")]
+    state_tokens_dropped: Annotated[float, Field(alias="stateTokensDropped")]
+    truncated: bool
+    truncated_questions: Annotated[list[str], Field(alias="truncatedQuestions")]
+    options: Annotated[
+        DecideResponseResultUsageOptions | None,
+        Field(title="DecideResponseResultUsageOptions"),
+    ] = None
+
+
+class DecideResponseResult(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    model: str
+    answers: Annotated[
+        DecideResponseResultAnswers, Field(title="DecideResponseResultAnswers")
+    ]
+    usage: Annotated[
+        DecideResponseResultUsage, Field(title="DecideResponseResultUsage")
+    ]
+
+
+class DecideResponseResultItemAnswersValueChoiceAction(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    act_probability: Annotated[
+        float,
+        Field(
+            alias="actProbability",
+            description="Currently unreliable; do not use to trigger actions.",
+        ),
+    ]
+
+
+class DecideResponseResultItemAnswersValueChoiceProbabilities(
+    RootModel[dict[str, float]]
+):
+    root: Annotated[
+        dict[str, float],
+        Field(title="DecideResponseResultItemAnswersValueChoiceProbabilities"),
+    ]
+
+
+class DecideResponseResultItemAnswersValueChoice(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    answer_confidence: Annotated[float, Field(alias="answerConfidence")]
+    confidence: float
+    action: Annotated[
+        DecideResponseResultItemAnswersValueChoiceAction,
+        Field(title="DecideResponseResultItemAnswersValueChoiceAction"),
+    ]
+    type: Literal["choice"] = "choice"
+    choice: str | float | bool
+    probabilities: Annotated[
+        DecideResponseResultItemAnswersValueChoiceProbabilities,
+        Field(title="DecideResponseResultItemAnswersValueChoiceProbabilities"),
+    ]
+
+
+class DecideResponseResultItemAnswersValueScoreAction(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    act_probability: Annotated[
+        float,
+        Field(
+            alias="actProbability",
+            description="Currently unreliable; do not use to trigger actions.",
+        ),
+    ]
+
+
+class DecideResponseResultItemAnswersValueScoreLegend(RootModel[dict[str, str]]):
+    root: Annotated[
+        dict[str, str], Field(title="DecideResponseResultItemAnswersValueScoreLegend")
+    ]
+
+
+class DecideResponseResultItemAnswersValueScoreProbabilities(
+    RootModel[dict[str, float]]
+):
+    root: Annotated[
+        dict[str, float],
+        Field(title="DecideResponseResultItemAnswersValueScoreProbabilities"),
+    ]
+
+
+class DecideResponseResultItemAnswersValueScore(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    answer_confidence: Annotated[float, Field(alias="answerConfidence")]
+    confidence: float
+    action: Annotated[
+        DecideResponseResultItemAnswersValueScoreAction,
+        Field(title="DecideResponseResultItemAnswersValueScoreAction"),
+    ]
+    type: Literal["score"] = "score"
+    score: float
+    legend: Annotated[
+        DecideResponseResultItemAnswersValueScoreLegend,
+        Field(title="DecideResponseResultItemAnswersValueScoreLegend"),
+    ]
+    probabilities: Annotated[
+        DecideResponseResultItemAnswersValueScoreProbabilities,
+        Field(title="DecideResponseResultItemAnswersValueScoreProbabilities"),
+    ]
+
+
+class DecideResponseResultItemAnswersValueNoulAction(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    act_probability: Annotated[
+        float,
+        Field(
+            alias="actProbability",
+            description="Currently unreliable; do not use to trigger actions.",
+        ),
+    ]
+
+
+class DecideResponseResultItemAnswersValueNoul(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    answer_confidence: Annotated[float, Field(alias="answerConfidence")]
+    confidence: float
+    action: Annotated[
+        DecideResponseResultItemAnswersValueNoulAction,
+        Field(title="DecideResponseResultItemAnswersValueNoulAction"),
+    ]
+    type: Literal["noul"] = "noul"
+    noul: float
+
+
+class DecideResponseResultItemAnswers(
+    RootModel[
+        dict[
+            str,
+            DecideResponseResultItemAnswersValueChoice
+            | DecideResponseResultItemAnswersValueScore
+            | DecideResponseResultItemAnswersValueNoul,
+        ]
+    ]
+):
+    root: Annotated[
+        dict[
+            str,
+            DecideResponseResultItemAnswersValueChoice
+            | DecideResponseResultItemAnswersValueScore
+            | DecideResponseResultItemAnswersValueNoul,
+        ],
+        Field(title="DecideResponseResultItemAnswers"),
+    ]
+
+
+class DecideResponseResultItemUsageOptionsValue(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    total: float
+    distinct: float
+    tokens_per_option: Annotated[float | None, Field(alias="tokensPerOption")]
+
+
+class DecideResponseResultItemUsageOptions(
+    RootModel[dict[str, DecideResponseResultItemUsageOptionsValue]]
+):
+    root: Annotated[
+        dict[str, DecideResponseResultItemUsageOptionsValue],
+        Field(title="DecideResponseResultItemUsageOptions"),
+    ]
+
+
+class DecideResponseResultItemUsage(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    input_tokens: Annotated[float, Field(alias="inputTokens")]
+    output_tokens: Annotated[float, Field(alias="outputTokens")]
+    state_tokens: Annotated[float, Field(alias="stateTokens")]
+    state_tokens_dropped: Annotated[float, Field(alias="stateTokensDropped")]
+    truncated: bool
+    truncated_questions: Annotated[list[str], Field(alias="truncatedQuestions")]
+    options: Annotated[
+        DecideResponseResultItemUsageOptions | None,
+        Field(title="DecideResponseResultItemUsageOptions"),
+    ] = None
+
+
+class DecideResponseResultItem(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    model: str
+    answers: Annotated[
+        DecideResponseResultItemAnswers, Field(title="DecideResponseResultItemAnswers")
+    ]
+    usage: Annotated[
+        DecideResponseResultItemUsage, Field(title="DecideResponseResultItemUsage")
+    ]
+
+
+class DecideResponse(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["decide"] = "decide"
+    result: DecideResponseResult | list[DecideResponseResultItem]
 
 
 class DeleteCacheAllRequest(GeneratedBaseModel):
@@ -4331,7 +5922,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     width: Annotated[
         int | None,
         Field(
-            description="Image width in pixels (must be a multiple of 8).",
+            description="Image width in pixels. Multiple of 8; Qwen-Image-2.1 requires a multiple of 32.",
             gt=0,
             le=9007199254740991,
             multiple_of=8,
@@ -4340,7 +5931,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     height: Annotated[
         int | None,
         Field(
-            description="Image height in pixels (must be a multiple of 8).",
+            description="Image height in pixels. Multiple of 8; Qwen-Image-2.1 requires a multiple of 32.",
             gt=0,
             le=9007199254740991,
             multiple_of=8,
@@ -4355,7 +5946,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     cfg_scale: Annotated[
         float | None,
         Field(
-            description="Classifier-free guidance scale for SD 1.x / 2.x / XL / SD3 models; typical range 1–20, default 7"
+            description="Classifier-free guidance scale for SD and Qwen-Image models; typical range 1-20, default 7"
         ),
     ] = None
     img_cfg_scale: Annotated[
@@ -4413,7 +6004,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     init_image: Annotated[
         str | None,
         Field(
-            description="Base64-encoded image for img2img generation. Mutually exclusive with init_images.",
+            description="Base64-encoded PNG/JPEG for img2img or reference editing. Qwen-Image-2.1 requires projectionModelSrc for editing and preserves reference alpha. Mutually exclusive with init_images.",
             min_length=1,
             pattern="^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
         ),
@@ -4421,7 +6012,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     init_images: Annotated[
         list[InitImage] | None,
         Field(
-            description="FLUX.2-only multi-reference fusion: array of base64-encoded PNG/JPEG buffers. Each buffer becomes a separate reference image that the FLUX.2 transformer attends to. Mutually exclusive with init_image; requires the model to be loaded with config.prediction='flux2_flow' and a Qwen3 text encoder via llmModelSrc.",
+            description="Ordered base64-encoded PNG/JPEG references for models with reference editing, including FLUX.2 and Qwen-Image-2.1. Native model detection validates support. Qwen-Image-2.1 requires projectionModelSrc, preserves alpha, and does not need FLUX @imageN tags or a prediction override. Mutually exclusive with init_image.",
             min_length=1,
         ),
     ] = None
@@ -4448,7 +6039,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     strength: Annotated[
         float | None,
         Field(
-            description="img2img denoising strength (0.0 = keep source, 1.0 = ignore source); used by the SD/SDXL SDEdit path. No-op for FLUX.2, which uses in-context conditioning and ignores this field.",
+            description="img2img denoising strength for SD/SDXL SDEdit. Does not control reference-editing strength for FLUX.2 or Qwen-Image-2.1; these models start the target from noise.",
             ge=0.0,
             le=1.0,
         ),
@@ -4456,7 +6047,7 @@ class DiffusionStreamRequest(GeneratedBaseModel):
     upscale: Annotated[
         bool | DiffusionStreamRequestUpscale | None,
         Field(
-            description="Post-generation ESRGAN upscale. `true` (or `{}` / `{ repeats: 1 }`) runs a single upscale pass at the model's native scale factor (e.g. x4 for RealESRGAN_x4plus). `false` is a no-op (same as omitting the field). `{ repeats: N }` runs the upscaler N times sequentially — each pass multiplies the output dimensions by the model's scale factor. When `batch_count > 1`, every output image is upscaled independently. Requires the model to be loaded with `upscaler.model_src` set in modelConfig."
+            description="Post-generation ESRGAN upscale. `true` (or `{}` / `{ repeats: 1 }`) runs a single upscale pass at the model's native scale factor (e.g. x4 for RealESRGAN_x4plus). `false` is a no-op (same as omitting the field). `{ repeats: N }` runs the upscaler N times sequentially — each pass multiplies the output dimensions by the model's scale factor. When `batch_count > 1`, every output image is upscaled independently. Requires the model to be loaded with `upscaler.model_src` set in modelConfig. ESRGAN accepts RGB only; Qwen-Image-2.1 RGBA output rejects upscaling."
         ),
     ] = None
     type: Literal["diffusionStream"] = "diffusionStream"
@@ -5381,6 +6972,7 @@ class GetModelInfoResponseModelInfoAddon(Enum):
     whisper = "whisper"
     bci = "bci"
     parakeet = "parakeet"
+    moss_transcribe = "moss-transcribe"
     embeddings = "embeddings"
     nmt = "nmt"
     vad = "vad"
@@ -8914,6 +10506,14 @@ class LoadModelSrcRequestLlamacppCompletionModelFitPolicy(Enum):
     off = "off"
 
 
+class LoadModelSrcRequestLlamacppCompletionModelConfigBackendItem(Enum):
+    cuda = "cuda"
+    vulkan = "vulkan"
+    metal = "metal"
+    opencl = "opencl"
+    auto = "auto"
+
+
 class Predict(RootModel[int]):
     root: Annotated[
         int,
@@ -8938,6 +10538,11 @@ class LoadModelSrcRequestLlamacppCompletionModelConfigVerbosity(Enum):
     number_1 = 1
     number_2 = 2
     number_3 = 3
+
+
+class LoadModelSrcRequestLlamacppCompletionModelConfigCacheCheckpointStorage(Enum):
+    memory = "memory"
+    disk = "disk"
 
 
 class MainGpu(RootModel[int]):
@@ -9006,15 +10611,24 @@ class FitTarget1(RootModel[str]):
     ]
 
 
+class LoadModelSrcRequestLlamacppCompletionModelConfigSpecType(Enum):
+    none = "none"
+    draft_mtp = "draft-mtp"
+    draft_dflash = "draft-dflash"
+
+
 class LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrcAddon(Enum):
     llamacpp_completion = "llamacpp-completion"
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -9114,6 +10728,115 @@ class LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrc(
     ] = None
 
 
+class LoadModelSrcRequestLlamacppCompletionModelConfigDraftModelSrcAddon(Enum):
+    llamacpp_completion = "llamacpp-completion"
+    whispercpp_transcription = "whispercpp-transcription"
+    bci_whispercpp_transcription = "bci-whispercpp-transcription"
+    llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
+    nmtcpp_translation = "nmtcpp-translation"
+    onnx_tts = "onnx-tts"
+    tts_ggml = "tts-ggml"
+    parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
+    ggml_ocr = "ggml-ocr"
+    sdcpp_generation = "sdcpp-generation"
+    audiogen_ggml = "audiogen-ggml"
+    ggml_vla = "ggml-vla"
+    ggml_classification = "ggml-classification"
+    llm = "llm"
+    whisper = "whisper"
+    bci = "bci"
+    embeddings = "embeddings"
+    nmt = "nmt"
+    parakeet = "parakeet"
+    tts = "tts"
+    ocr = "ocr"
+    diffusion = "diffusion"
+    audiogen = "audiogen"
+    vla = "vla"
+    classification = "classification"
+
+
+class LoadModelSrcRequestLlamacppCompletionModelConfigDraftModelSrc(GeneratedBaseModel):
+    src: Annotated[
+        str,
+        Field(
+            description="Location of the model file: a local file path, an HTTP(S) URL, or a `registry://` / `pear://` URI."
+        ),
+    ]
+    name: Annotated[
+        str | None,
+        Field(
+            description="Display name for this model instance; overrides the name derived from the source."
+        ),
+    ] = None
+    model_id: Annotated[
+        str | None,
+        Field(
+            alias="modelId",
+            description="Unique identifier used to reference the model in QVAC calls.",
+        ),
+    ] = None
+    registry_path: Annotated[
+        str | None,
+        Field(
+            alias="registryPath",
+            description="Registry-relative path to the model (set for registry-backed models).",
+        ),
+    ] = None
+    registry_source: Annotated[
+        str | None,
+        Field(
+            alias="registrySource",
+            description="Registry source identifier, e.g. `huggingface`.",
+        ),
+    ] = None
+    blob_core_key: Annotated[
+        str | None,
+        Field(
+            alias="blobCoreKey",
+            description="Hyperdrive blob core key for the model file.",
+        ),
+    ] = None
+    blob_index: Annotated[
+        float | None,
+        Field(
+            alias="blobIndex",
+            description="Internal: index of this shard within its Hyperdrive blob core, for sharded models.",
+        ),
+    ] = None
+    engine: Annotated[
+        str | None,
+        Field(
+            description="Canonical inference engine identifier, e.g. `llamacpp-completion`."
+        ),
+    ] = None
+    expected_size: Annotated[
+        float | None,
+        Field(
+            alias="expectedSize",
+            description="Expected total size of the model file in bytes.",
+        ),
+    ] = None
+    sha256_checksum: Annotated[
+        str | None,
+        Field(
+            alias="sha256Checksum",
+            description="Expected SHA-256 checksum of the model file.",
+        ),
+    ] = None
+    addon: Annotated[
+        LoadModelSrcRequestLlamacppCompletionModelConfigDraftModelSrcAddon
+        | Literal["vad"]
+        | None,
+        Field(
+            description="Inference addon / capability category this model belongs to."
+        ),
+    ] = None
+
+
 class LoadModelSrcRequestLlamacppCompletionModelConfigImageTileMode(Enum):
     disabled = "disabled"
     batched = "batched"
@@ -9126,6 +10849,13 @@ class LoadModelSrcRequestLlamacppCompletionModelConfigImageNoUpscale(Enum):
 
 
 class LoadModelSrcRequestLlamacppCompletionModelConfig(GeneratedBaseModel):
+    backend: Annotated[
+        list[LoadModelSrcRequestLlamacppCompletionModelConfigBackendItem] | None,
+        Field(
+            description="Ordered GPU backend names, such as ['cuda', 'vulkan']. Accepted names: cuda, vulkan, metal, opencl, and auto for no preference. If unset, uses the native default order. If none of the specified names has a corresponding available device, selection falls back to the native default order. Use device: 'cpu' for CPU. A GPU override cannot be combined with a split-mode other than 'none' or with devices.",
+            min_length=1,
+        ),
+    ] = None
     ctx_size: Annotated[
         float | None,
         Field(
@@ -9236,6 +10966,44 @@ class LoadModelSrcRequestLlamacppCompletionModelConfig(GeneratedBaseModel):
         bool | None,
         Field(
             description="Enable tool calling via the model's jinja chat template. Default false."
+        ),
+    ] = None
+    cache_checkpoints: Annotated[
+        int | None,
+        Field(
+            description="Prompt-cache checkpoints kept per sequence on hybrid / recurrent models (Qwen3.5, Jamba, DeepSeek V4) and on sliding-window models (Gemma 3/4, gpt-oss) whose context exceeds the window, one per cached request at the end of its history (0–1024). Default 1, which serves the next turn and a regenerate; editing the user message k-th from the end without reprocessing the whole conversation needs `k + 1`. Regenerates and edits restore a checkpoint only under a caller-managed string `kvCache` key. `0` disables them. Each checkpoint holds a copy of the recurrent or sliding-window state of its sequence in host RAM (on disk with `cache_checkpoint_storage: 'disk'`), up to hundreds of MiB on larger models, so memory grows with this value and with `parallel` unless `cache_checkpoints_max_bytes` caps it. Model fit checks do not count it. The newest one is also saved in the `cacheKey` file, so a conversation reloaded in a new process continues from it. Ignored by other models.",
+            ge=0,
+            le=1024,
+        ),
+    ] = None
+    cache_checkpoints_max_bytes: Annotated[
+        int | None,
+        Field(
+            description="Byte budget for the checkpoints kept per sequence; the oldest are dropped until the rest fit. `0` (default) is unlimited. The load fails when the budget cannot hold `cache_checkpoints` checkpoints of the largest size the context allows (on a sliding-window model, a full window).",
+            ge=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    cache_checkpoint_storage: Annotated[
+        LoadModelSrcRequestLlamacppCompletionModelConfigCacheCheckpointStorage | None,
+        Field(
+            description="Where checkpoints and the per-request rollback snapshot are kept: `'memory'` (default) in host RAM, `'disk'` in files under `cache_checkpoint_dir`, which it requires.",
+            title="LoadModelSrcRequestLlamacppCompletionModelConfigCacheCheckpointStorage",
+        ),
+    ] = None
+    cache_checkpoint_dir: Annotated[
+        str | None,
+        Field(
+            description="Writable directory for checkpoint files, required with `cache_checkpoint_storage: 'disk'` and rejected without it. The addon writes in a private directory it creates inside it (on Windows, in the directory itself). On mobile, pass the app's cache directory.",
+            min_length=1,
+        ),
+    ] = None
+    cache_ram_mib: Annotated[
+        int | None,
+        Field(
+            description="Host-RAM budget, in MiB, for cached conversations that are not running (0–1048576). Default 0 (off). A conversation the model switches away from (another `kvCache` key, or a slot eviction with `parallel >= 2`) is kept in RAM, so returning to its caller-managed string `kvCache` key skips reading its `cacheKey` file. Model fit checks do not count this memory.",
+            ge=0,
+            le=1048576,
         ),
     ] = None
     cache_type_k: Annotated[
@@ -9356,6 +11124,32 @@ class LoadModelSrcRequestLlamacppCompletionModelConfig(GeneratedBaseModel):
             le=9007199254740991,
         ),
     ] = None
+    image_max_megapixels: Annotated[
+        int | None,
+        Field(
+            alias="image-max-megapixels",
+            description="Largest image a vision model accepts, in millions of pixels (width × height). Checked against the image header before decoding; larger images are rejected. Vision models only. Default 50.",
+            ge=1,
+            le=18446744073709,
+        ),
+    ] = None
+    poll: Annotated[
+        int | None,
+        Field(
+            description="CPU polling level, from 0 to 100. If omitted, uses the default native behavior. Higher values may reduce wake latency but consume more CPU during GPU work.",
+            ge=0,
+            le=100,
+        ),
+    ] = None
+    poll_batch: Annotated[
+        int | None,
+        Field(
+            alias="pollBatch",
+            description="CPU polling level for batch processing, from 0 to 100. If omitted, uses the default native behavior.",
+            ge=0,
+            le=100,
+        ),
+    ] = None
     threads: Annotated[
         int | None,
         Field(
@@ -9368,7 +11162,7 @@ class LoadModelSrcRequestLlamacppCompletionModelConfig(GeneratedBaseModel):
         int | None,
         Field(
             alias="threads-batch",
-            description="CPU threads to use during batch and prompt processing. Setting it governs generation too and discards `threads` and `cpu-mask`; leave it unset for `threads` to apply to both.",
+            description="CPU threads to use during batch and prompt processing. Applies to steps processing several tokens, including parallel decoding and speculative verification. Single-sequence generation uses `threads`.",
             ge=-9007199254740991,
             le=9007199254740991,
         ),
@@ -9377,14 +11171,14 @@ class LoadModelSrcRequestLlamacppCompletionModelConfig(GeneratedBaseModel):
         str | None,
         Field(
             alias="cpu-mask",
-            description="CPU affinity mask as an arbitrarily long hex string, e.g. `'ff'`. Unset applies no affinity. Ignored when `threads-batch` is set.",
+            description="CPU affinity mask as an arbitrarily long hex string, e.g. `'ff'`. Applies to generation. Unset applies no affinity.",
         ),
     ] = None
     cpu_mask_batch: Annotated[
         str | None,
         Field(
             alias="cpu-mask-batch",
-            description="CPU affinity mask for batch and prompt processing, in the same form as `cpu-mask`. Honoured only alongside `threads-batch`; without it `cpu-mask` takes over.",
+            description="CPU affinity mask for batch and prompt processing, in the same form as `cpu-mask`. Unset inherits `cpu-mask` when the batch thread count is also unset.",
         ),
     ] = None
     override_tensor: Annotated[
@@ -9462,11 +11256,49 @@ class LoadModelSrcRequestLlamacppCompletionModelConfig(GeneratedBaseModel):
             le=2147483647,
         ),
     ] = None
+    spec_type: Annotated[
+        LoadModelSrcRequestLlamacppCompletionModelConfigSpecType | None,
+        Field(
+            description="Speculative decoding, as llama-server's `--spec-type`. `'draft-mtp'` drafts with the model's own multi-token-prediction head, or with an external MTP head given as `draftModelSrc`; the head, when given, otherwise the model, must ship MTP layers, and a head must match the model, or the load fails. `'draft-dflash'` drafts with the DFlash model given as `draftModelSrc`, which it requires. The model verifies every draft, so output keeps the distribution of plain decoding. `'none'` (default) decodes one token per step. Works with multimodal prompts, `parallel` and `kvCache`. Completion stats then report `draftTokens` and `draftAcceptedTokens`.",
+            title="LoadModelSrcRequestLlamacppCompletionModelConfigSpecType",
+        ),
+    ] = None
+    spec_draft_n_max: Annotated[
+        int | None,
+        Field(
+            description="Longest draft per step (1–64, default 3). Lowered at load, with a warning, to fit one `ubatch-size` and each sequence’s share of `batch-size`. Requires `spec_type` `'draft-mtp'` or `'draft-dflash'`.",
+            ge=1,
+            le=64,
+        ),
+    ] = None
+    spec_draft_n_min: Annotated[
+        int | None,
+        Field(
+            description="Shortest draft worth verifying (0–64, default 0, at most `spec_draft_n_max`); shorter drafts are dropped. Requires `spec_type` `'draft-mtp'` or `'draft-dflash'`.",
+            ge=0,
+            le=64,
+        ),
+    ] = None
+    spec_draft_p_min: Annotated[
+        float | None,
+        Field(
+            description="Minimum draft-head probability for a token to extend the draft (0–1, default 0). Requires `spec_type` `'draft-mtp'` or `'draft-dflash'`.",
+            ge=0.0,
+            le=1.0,
+        ),
+    ] = None
     projection_model_src: Annotated[
         str | LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrc | None,
         Field(
             alias="projectionModelSrc",
             description="Multimodal projection (mmproj / vision encoder) model source; multimodal models only.",
+        ),
+    ] = None
+    draft_model_src: Annotated[
+        str | LoadModelSrcRequestLlamacppCompletionModelConfigDraftModelSrc | None,
+        Field(
+            alias="draftModelSrc",
+            description="Draft model source, as llama-server's `--spec-draft-model`: the DFlash model, required by `spec_type: 'draft-dflash'`, or an external MTP head for `spec_type: 'draft-mtp'`, such as the MTP quantization of the same model or a Gemma 4 assistant for its Gemma 4 model. Placed like the model (`device`, `gpu_layers`). Model fit checks count an MTP head's memory but not a DFlash model's or a Gemma 4 assistant's, so leave room for those.",
         ),
     ] = None
     image_tile_mode: Annotated[
@@ -9646,10 +11478,13 @@ class LoadModelSrcRequestWhispercppTranscriptionModelConfigVadModelSrcAddon(Enum
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -9973,7 +11808,7 @@ class LoadModelSrcRequestWhispercppTranscriptionModelConfig(GeneratedBaseModel):
         str | None,
         Field(
             alias="backendsDir",
-            description="Root directory for dynamically-loaded ggml backend libraries. Defaults to the addon's own `prebuilds/`.",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
         ),
     ] = None
     vad_params: Annotated[
@@ -10223,10 +12058,13 @@ class LoadModelSrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrcAd
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -10359,7 +12197,7 @@ class LoadModelSrcRequestBciWhispercppTranscriptionModelConfig(GeneratedBaseMode
         str | None,
         Field(
             alias="backendsDir",
-            description="Android only: override the default ggml backend prebuilds directory. Defaults to `<addon>/prebuilds`.",
+            description="Android and Linux: the directory scanned, as given, for the ggml backend modules. Defaults to the directory next to the loaded addon module.",
         ),
     ] = None
     embedder_model_src: Annotated[
@@ -10562,6 +12400,31 @@ class LoadModelSrcRequestParakeetTranscriptionModelConfig(GeneratedBaseModel):
             pattern="^(|auto|[a-zA-Z]{2,3}(-[a-zA-Z]{2,4})?)$",
         ),
     ] = None
+    streaming_speaker_vad: Annotated[
+        bool | None,
+        Field(
+            alias="streamingSpeakerVad",
+            description="Emit speaker-activity VAD events with the dominant speaker id during diarization streaming. Default false.",
+        ),
+    ] = None
+    diarization_threshold: Annotated[
+        float | None,
+        Field(
+            alias="diarizationThreshold",
+            description="Speaker-activity threshold; omit for the model default (0.641 for Sortformer, 0.5 for Nemotron 3 Diarization).",
+            ge=0.0,
+            le=1.0,
+        ),
+    ] = None
+    diarization_min_segment_ms: Annotated[
+        int | None,
+        Field(
+            alias="diarizationMinSegmentMs",
+            description="Shortest diarization turn in ms; omit for the model default (510 for Sortformer, 200 for Nemotron 3 Diarization).",
+            ge=0,
+            le=9007199254740991,
+        ),
+    ] = None
     streaming_spk_cache_enable: Annotated[
         bool | None,
         Field(
@@ -10591,7 +12454,7 @@ class LoadModelSrcRequestParakeetTranscriptionModelConfig(GeneratedBaseModel):
         int | None,
         Field(
             alias="streamingChunkLeftContextMs",
-            description="AOSC: encoder left-context window in ms. Default 80.",
+            description="Diarization encoder left-context window in ms. Default 80 for Sortformer, 0 for Nemotron 3 Diarization; explicit 80 is preserved.",
             ge=0,
             le=9007199254740991,
         ),
@@ -10614,11 +12477,29 @@ class LoadModelSrcRequestParakeetTranscriptionModelConfig(GeneratedBaseModel):
             le=9007199254740991,
         ),
     ] = None
+    long_form_window_frames: Annotated[
+        int | None,
+        Field(
+            alias="longFormWindowFrames",
+            description="Offline encoder window for long recordings, in 80 ms encoder frames. `0` takes the window the model recommends (TranscribePsy: 750 frames, 60 s, with 94 frames of context on each side; other models: the engine's balanced automatic windows); a negative value encodes the whole input in one pass. Default 0.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
+    long_form_context_frames: Annotated[
+        int | None,
+        Field(
+            alias="longFormContextFrames",
+            description="Encoder frames of context shared with each neighbouring long-form window. `0` lets the engine choose; `-1` runs the windows without context.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
     backends_dir: Annotated[
         str | None,
         Field(
             alias="backendsDir",
-            description="Root directory for dynamically-loaded ggml backend `.so` files. Defaults to `prebuilds/`.",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
         ),
     ] = None
     opencl_cache_dir: Annotated[
@@ -10715,10 +12596,116 @@ class LoadModelSrcRequestParakeetTranscription(GeneratedBaseModel):
     ] = None
 
 
+class LoadModelSrcRequestMossTranscribeModelFitPolicy(Enum):
+    log = "log"
+    refuse = "refuse"
+    off = "off"
+
+
+class LoadModelSrcRequestMossTranscribeModelConfig(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    max_threads: Annotated[
+        int | None,
+        Field(
+            alias="maxThreads",
+            description="CPU threads; 0 lets the engine choose.",
+            ge=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    use_gpu: Annotated[
+        bool | None,
+        Field(
+            alias="useGPU",
+            description="Enable the linked GPU backend, including Metal. Default false.",
+        ),
+    ] = None
+    backends_dir: Annotated[
+        str | None,
+        Field(
+            alias="backendsDir",
+            description="Directory containing dynamically loaded ggml backend libraries.",
+        ),
+    ] = None
+
+
+class LoadModelSrcRequestMossTranscribe(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["loadModel"] = "loadModel"
+    model_src: Annotated[
+        str,
+        Field(
+            alias="modelSrc",
+            description="The model to load: a registry model constant for a built-in model, or a model source — a local file path, an HTTP(S) URL, or a `registry://` / `pear://` URI — for HTTP, local, or P2P models.",
+        ),
+    ]
+    model_name: Annotated[str | None, Field(alias="modelName")] = None
+    with_progress: Annotated[bool | None, Field(alias="withProgress")] = None
+    seed: bool | None = None
+    fallback_src: Annotated[
+        str | None,
+        Field(
+            alias="fallbackSrc",
+            description="Alternate source — an HTTP URL or local file path — used to load a built-in registry model when it cannot be downloaded from the registry. The bytes are validated against the model checksum before use.",
+        ),
+    ] = None
+    require_http_checksum: Annotated[
+        bool | None,
+        Field(
+            alias="requireHttpChecksum",
+            description="Reject a Hugging Face HTTP download that exposes no usable SHA-256 instead of downloading it unverified. Overrides the engine config for this call; defaults to the config value (false).",
+        ),
+    ] = None
+    require_secure_transport: Annotated[
+        bool | None,
+        Field(
+            alias="requireSecureTransport",
+            description="Reject plaintext http:// and HTTPS→HTTP downgrades for every HTTP source on this call (loopback exempt); when unset, only Hugging Face transport is hardened. Overrides the engine config for this call; defaults to the config value (false).",
+        ),
+    ] = None
+    model_fit_policy: Annotated[
+        LoadModelSrcRequestMossTranscribeModelFitPolicy | None,
+        Field(
+            alias="modelFitPolicy",
+            description="What the engine fitter's verdict does to this load: `log` reports it and loads anyway, `refuse` rejects a load the fitter projects will not fit, `off` skips the check. Overrides the engine config for this call; defaults to the config value (`log`).",
+            title="LoadModelSrcRequestMossTranscribeModelFitPolicy",
+        ),
+    ] = None
+    request_id: Annotated[
+        str | None,
+        Field(
+            alias="requestId",
+            description="Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.",
+            min_length=1,
+        ),
+    ] = None
+    model_type: Annotated[Literal["moss-transcribe"], Field(alias="modelType")] = (
+        "moss-transcribe"
+    )
+    model_config_: Annotated[
+        LoadModelSrcRequestMossTranscribeModelConfig | None,
+        Field(
+            alias="modelConfig", title="LoadModelSrcRequestMossTranscribeModelConfig"
+        ),
+    ] = None
+
+
 class LoadModelSrcRequestLlamacppEmbeddingModelFitPolicy(Enum):
     log = "log"
     refuse = "refuse"
     off = "off"
+
+
+class LoadModelSrcRequestLlamacppEmbeddingModelConfigBackendItem(Enum):
+    cuda = "cuda"
+    vulkan = "vulkan"
+    metal = "metal"
+    opencl = "opencl"
+    auto = "auto"
 
 
 class LoadModelSrcRequestLlamacppEmbeddingModelConfigDevice(Enum):
@@ -10731,7 +12718,6 @@ class LoadModelSrcRequestLlamacppEmbeddingModelConfigPooling(Enum):
     mean = "mean"
     cls = "cls"
     last = "last"
-    rank = "rank"
 
 
 class LoadModelSrcRequestLlamacppEmbeddingModelConfigAttention(Enum):
@@ -10763,6 +12749,30 @@ class LoadModelSrcRequestLlamacppEmbeddingModelConfigVerbosity(Enum):
 
 
 class LoadModelSrcRequestLlamacppEmbeddingModelConfig(GeneratedBaseModel):
+    poll: Annotated[
+        int | None,
+        Field(
+            description="CPU polling level, from 0 to 100. If omitted, uses the default native behavior. Higher values may reduce wake latency but consume more CPU during GPU work.",
+            ge=0,
+            le=100,
+        ),
+    ] = None
+    poll_batch: Annotated[
+        int | None,
+        Field(
+            alias="pollBatch",
+            description="CPU polling level for batch processing, from 0 to 100. If omitted, uses the default native behavior.",
+            ge=0,
+            le=100,
+        ),
+    ] = None
+    backend: Annotated[
+        list[LoadModelSrcRequestLlamacppEmbeddingModelConfigBackendItem] | None,
+        Field(
+            description="Ordered GPU backend names, such as ['cuda', 'vulkan']. Accepted names: cuda, vulkan, metal, opencl, and auto for no preference. If unset, uses the native default order. If none of the specified names has a corresponding available device, selection falls back to the native default order. Use device: 'cpu' for CPU. A GPU override cannot be combined with splitMode: 'layer'.",
+            min_length=1,
+        ),
+    ] = None
     gpu_layers: Annotated[
         int | None,
         Field(
@@ -10791,7 +12801,7 @@ class LoadModelSrcRequestLlamacppEmbeddingModelConfig(GeneratedBaseModel):
     pooling: Annotated[
         LoadModelSrcRequestLlamacppEmbeddingModelConfigPooling | None,
         Field(
-            description="Pooling strategy collapsing token embeddings into one sequence vector: `'none'`, `'mean'`, `'cls'`, `'last'`, or `'rank'`. Unset uses the model default.",
+            description="Pooling strategy collapsing token embeddings into one sequence vector: `'none'`, `'mean'`, `'cls'`, or `'last'`. Unset uses the model default.",
             title="LoadModelSrcRequestLlamacppEmbeddingModelConfigPooling",
         ),
     ] = None
@@ -10918,6 +12928,409 @@ class LoadModelSrcRequestLlamacppEmbedding(GeneratedBaseModel):
             alias="modelConfig", title="LoadModelSrcRequestLlamacppEmbeddingModelConfig"
         ),
     ]
+
+
+class LoadModelSrcRequestLlamacppDecisionModelFitPolicy(Enum):
+    log = "log"
+    refuse = "refuse"
+    off = "off"
+
+
+class LoadModelSrcRequestLlamacppDecisionModelConfigDevice(Enum):
+    cpu = "cpu"
+    gpu = "gpu"
+
+
+class LoadModelSrcRequestLlamacppDecisionModelConfigFlashAttn(Enum):
+    on = "on"
+    off = "off"
+    auto = "auto"
+
+
+class MainGpu2(RootModel[int]):
+    root: Annotated[
+        int, Field(description="GPU index or device class.", ge=0, le=9007199254740991)
+    ]
+
+
+class LoadModelSrcRequestLlamacppDecisionModelConfigMainGpu(Enum):
+    integrated = "integrated"
+    dedicated = "dedicated"
+
+
+class LoadModelSrcRequestLlamacppDecisionModelConfigSplitMode(Enum):
+    none = "none"
+    layer = "layer"
+
+
+class LoadModelSrcRequestLlamacppDecisionModelConfig(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    device: Annotated[
+        LoadModelSrcRequestLlamacppDecisionModelConfigDevice | None,
+        Field(
+            description="Compute device. Default 'gpu'.",
+            title="LoadModelSrcRequestLlamacppDecisionModelConfigDevice",
+        ),
+    ] = None
+    gpu_layers: Annotated[
+        int | None,
+        Field(
+            description="Layers to offload. Unset lets the addon choose placement.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
+    batch_size: Annotated[
+        int | None,
+        Field(
+            description="Tokens per forward pass. Default 2048; each sequence must fit.",
+            gt=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    poll: Annotated[
+        int | None,
+        Field(
+            description="CPU polling level, from 0 to 100. If omitted, uses the default native behavior. Higher values may reduce wake latency but consume more CPU during GPU work.",
+            ge=0,
+            le=100,
+        ),
+    ] = None
+    poll_batch: Annotated[
+        int | None,
+        Field(
+            alias="pollBatch",
+            description="CPU polling level for batch processing, from 0 to 100. If omitted, uses the default native behavior.",
+            ge=0,
+            le=100,
+        ),
+    ] = None
+    threads: Annotated[
+        int | None,
+        Field(
+            description="CPU threads, at most the CPU count. Zero or below uses all logical CPUs.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
+    threads_batch: Annotated[
+        int | None,
+        Field(
+            alias="threads-batch",
+            description="Batch CPU threads. Unset uses threads; zero or below uses all logical CPUs.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
+    flash_attn: Annotated[
+        LoadModelSrcRequestLlamacppDecisionModelConfigFlashAttn | None,
+        Field(
+            description="Flash attention mode. Default auto.",
+            title="LoadModelSrcRequestLlamacppDecisionModelConfigFlashAttn",
+        ),
+    ] = None
+    verbosity: Annotated[
+        int | None,
+        Field(
+            description="Native log level: 0 error, 1 warn, 2 info, 3 debug.",
+            ge=0,
+            le=3,
+        ),
+    ] = None
+    main_gpu: Annotated[
+        MainGpu2 | LoadModelSrcRequestLlamacppDecisionModelConfigMainGpu | None,
+        Field(alias="main-gpu", description="GPU index or device class."),
+    ] = None
+    split_mode: Annotated[
+        LoadModelSrcRequestLlamacppDecisionModelConfigSplitMode | None,
+        Field(
+            alias="split-mode",
+            description="Multi-GPU split mode.",
+            title="LoadModelSrcRequestLlamacppDecisionModelConfigSplitMode",
+        ),
+    ] = None
+    tensor_split: Annotated[
+        str | None,
+        Field(alias="tensor-split", description="Per-GPU tensor split proportions."),
+    ] = None
+    opencl_cache_dir: Annotated[
+        str | None,
+        Field(
+            alias="openclCacheDir",
+            description="Writable OpenCL kernel cache directory, required on Android.",
+        ),
+    ] = None
+
+
+class LoadModelSrcRequestLlamacppDecision(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["loadModel"] = "loadModel"
+    model_src: Annotated[
+        str,
+        Field(
+            alias="modelSrc",
+            description="The model to load: a registry model constant for a built-in model, or a model source — a local file path, an HTTP(S) URL, or a `registry://` / `pear://` URI — for HTTP, local, or P2P models.",
+        ),
+    ]
+    model_name: Annotated[str | None, Field(alias="modelName")] = None
+    with_progress: Annotated[bool | None, Field(alias="withProgress")] = None
+    seed: bool | None = None
+    fallback_src: Annotated[
+        str | None,
+        Field(
+            alias="fallbackSrc",
+            description="Alternate source — an HTTP URL or local file path — used to load a built-in registry model when it cannot be downloaded from the registry. The bytes are validated against the model checksum before use.",
+        ),
+    ] = None
+    require_http_checksum: Annotated[
+        bool | None,
+        Field(
+            alias="requireHttpChecksum",
+            description="Reject a Hugging Face HTTP download that exposes no usable SHA-256 instead of downloading it unverified. Overrides the engine config for this call; defaults to the config value (false).",
+        ),
+    ] = None
+    require_secure_transport: Annotated[
+        bool | None,
+        Field(
+            alias="requireSecureTransport",
+            description="Reject plaintext http:// and HTTPS→HTTP downgrades for every HTTP source on this call (loopback exempt); when unset, only Hugging Face transport is hardened. Overrides the engine config for this call; defaults to the config value (false).",
+        ),
+    ] = None
+    model_fit_policy: Annotated[
+        LoadModelSrcRequestLlamacppDecisionModelFitPolicy | None,
+        Field(
+            alias="modelFitPolicy",
+            description="What the engine fitter's verdict does to this load: `log` reports it and loads anyway, `refuse` rejects a load the fitter projects will not fit, `off` skips the check. Overrides the engine config for this call; defaults to the config value (`log`).",
+            title="LoadModelSrcRequestLlamacppDecisionModelFitPolicy",
+        ),
+    ] = None
+    request_id: Annotated[
+        str | None,
+        Field(
+            alias="requestId",
+            description="Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.",
+            min_length=1,
+        ),
+    ] = None
+    model_type: Annotated[Literal["llamacpp-decision"], Field(alias="modelType")] = (
+        "llamacpp-decision"
+    )
+    model_config_: Annotated[
+        LoadModelSrcRequestLlamacppDecisionModelConfig | None,
+        Field(
+            alias="modelConfig", title="LoadModelSrcRequestLlamacppDecisionModelConfig"
+        ),
+    ] = None
+
+
+class LoadModelSrcRequestLlamacppRerankModelFitPolicy(Enum):
+    log = "log"
+    refuse = "refuse"
+    off = "off"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfigDevice(Enum):
+    cpu = "cpu"
+    gpu = "gpu"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfigBackendItem(Enum):
+    cuda = "cuda"
+    vulkan = "vulkan"
+    metal = "metal"
+    opencl = "opencl"
+    auto = "auto"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfigFlashAttn(Enum):
+    on = "on"
+    off = "off"
+    auto = "auto"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfigMainGpu(Enum):
+    integrated = "integrated"
+    dedicated = "dedicated"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfigSplitMode(Enum):
+    none = "none"
+    layer = "layer"
+
+
+class LoadModelSrcRequestLlamacppRerankModelConfig(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    device: Annotated[
+        LoadModelSrcRequestLlamacppRerankModelConfigDevice | None,
+        Field(
+            description="Compute device. Default 'gpu'.",
+            title="LoadModelSrcRequestLlamacppRerankModelConfigDevice",
+        ),
+    ] = None
+    gpu_layers: Annotated[
+        int | None,
+        Field(
+            description="Layers to offload. Unset lets the addon choose placement.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
+    batch_size: Annotated[
+        int | None,
+        Field(
+            description="Tokens per forward pass. Default 2048; each document paired with the query must fit.",
+            gt=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    backend: Annotated[
+        list[LoadModelSrcRequestLlamacppRerankModelConfigBackendItem] | None,
+        Field(
+            description="Ordered GPU backend names, such as ['cuda', 'vulkan']. Accepted names: cuda, vulkan, metal, opencl, and auto for no preference. If unset, uses the native default order. If none of the specified names has a corresponding available device, selection falls back to the native default order. Use device: 'cpu' for CPU. A GPU override cannot be combined with 'split-mode': 'layer'.",
+            min_length=1,
+        ),
+    ] = None
+    poll: Annotated[
+        int | None,
+        Field(
+            description="CPU polling level, from 0 to 100. If omitted, uses the default native behavior. Higher values may reduce wake latency but consume more CPU during GPU work.",
+            ge=0,
+            le=100,
+        ),
+    ] = None
+    poll_batch: Annotated[
+        int | None,
+        Field(
+            alias="pollBatch",
+            description="CPU polling level for batch processing, from 0 to 100. If omitted, uses the default native behavior.",
+            ge=0,
+            le=100,
+        ),
+    ] = None
+    threads: Annotated[
+        int | None,
+        Field(
+            description="CPU threads, at most the CPU count. Zero or below uses all logical CPUs.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
+    threads_batch: Annotated[
+        int | None,
+        Field(
+            alias="threads-batch",
+            description="Batch CPU threads. Unset uses threads; zero or below uses all logical CPUs.",
+            ge=-9007199254740991,
+            le=9007199254740991,
+        ),
+    ] = None
+    flash_attn: Annotated[
+        LoadModelSrcRequestLlamacppRerankModelConfigFlashAttn | None,
+        Field(
+            description="Flash attention mode. Default auto.",
+            title="LoadModelSrcRequestLlamacppRerankModelConfigFlashAttn",
+        ),
+    ] = None
+    verbosity: Annotated[
+        int | None,
+        Field(
+            description="Native log level: 0 error, 1 warn, 2 info, 3 debug.",
+            ge=0,
+            le=3,
+        ),
+    ] = None
+    main_gpu: Annotated[
+        MainGpu2 | LoadModelSrcRequestLlamacppRerankModelConfigMainGpu | None,
+        Field(alias="main-gpu", description="GPU index or device class."),
+    ] = None
+    split_mode: Annotated[
+        LoadModelSrcRequestLlamacppRerankModelConfigSplitMode | None,
+        Field(
+            alias="split-mode",
+            description="Multi-GPU split mode.",
+            title="LoadModelSrcRequestLlamacppRerankModelConfigSplitMode",
+        ),
+    ] = None
+    tensor_split: Annotated[
+        str | None,
+        Field(alias="tensor-split", description="Per-GPU tensor split proportions."),
+    ] = None
+    opencl_cache_dir: Annotated[
+        str | None,
+        Field(
+            alias="openclCacheDir",
+            description="Writable OpenCL kernel cache directory, required on Android.",
+        ),
+    ] = None
+
+
+class LoadModelSrcRequestLlamacppRerank(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["loadModel"] = "loadModel"
+    model_src: Annotated[
+        str,
+        Field(
+            alias="modelSrc",
+            description="The model to load: a registry model constant for a built-in model, or a model source — a local file path, an HTTP(S) URL, or a `registry://` / `pear://` URI — for HTTP, local, or P2P models.",
+        ),
+    ]
+    model_name: Annotated[str | None, Field(alias="modelName")] = None
+    with_progress: Annotated[bool | None, Field(alias="withProgress")] = None
+    seed: bool | None = None
+    fallback_src: Annotated[
+        str | None,
+        Field(
+            alias="fallbackSrc",
+            description="Alternate source — an HTTP URL or local file path — used to load a built-in registry model when it cannot be downloaded from the registry. The bytes are validated against the model checksum before use.",
+        ),
+    ] = None
+    require_http_checksum: Annotated[
+        bool | None,
+        Field(
+            alias="requireHttpChecksum",
+            description="Reject a Hugging Face HTTP download that exposes no usable SHA-256 instead of downloading it unverified. Overrides the engine config for this call; defaults to the config value (false).",
+        ),
+    ] = None
+    require_secure_transport: Annotated[
+        bool | None,
+        Field(
+            alias="requireSecureTransport",
+            description="Reject plaintext http:// and HTTPS→HTTP downgrades for every HTTP source on this call (loopback exempt); when unset, only Hugging Face transport is hardened. Overrides the engine config for this call; defaults to the config value (false).",
+        ),
+    ] = None
+    model_fit_policy: Annotated[
+        LoadModelSrcRequestLlamacppRerankModelFitPolicy | None,
+        Field(
+            alias="modelFitPolicy",
+            description="What the engine fitter's verdict does to this load: `log` reports it and loads anyway, `refuse` rejects a load the fitter projects will not fit, `off` skips the check. Overrides the engine config for this call; defaults to the config value (`log`).",
+            title="LoadModelSrcRequestLlamacppRerankModelFitPolicy",
+        ),
+    ] = None
+    request_id: Annotated[
+        str | None,
+        Field(
+            alias="requestId",
+            description="Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.",
+            min_length=1,
+        ),
+    ] = None
+    model_type: Annotated[Literal["llamacpp-rerank"], Field(alias="modelType")] = (
+        "llamacpp-rerank"
+    )
+    model_config_: Annotated[
+        LoadModelSrcRequestLlamacppRerankModelConfig | None,
+        Field(
+            alias="modelConfig", title="LoadModelSrcRequestLlamacppRerankModelConfig"
+        ),
+    ] = None
 
 
 class LoadModelSrcRequestNmtcppTranslationModelFitPolicy(Enum):
@@ -11049,10 +13462,13 @@ class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrcAddon(En
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -11157,10 +13573,13 @@ class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrcAddon(En
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -11271,10 +13690,13 @@ class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSrcA
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -11381,10 +13803,13 @@ class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVocabS
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -11491,10 +13916,13 @@ class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVocabS
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -11988,10 +14416,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxS3genModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -12094,10 +14525,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrcAddon(Enum
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -12202,10 +14636,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxMecabDictSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -12308,10 +14745,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxCangjieTsvSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -12414,10 +14854,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrEnhancerModelSrcAddon
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -12522,10 +14965,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrDenoiserModelSrcAddon
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -12755,7 +15201,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterbox(GeneratedBaseModel):
         str | None,
         Field(
             alias="backendsDir",
-            description="Root directory for dynamically-loaded ggml backend `.so` files. Defaults to `prebuilds/`.",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
             min_length=1,
         ),
     ] = None
@@ -12887,10 +15333,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrEnhancerModelSrcAddon
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -12995,10 +15444,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrDenoiserModelSrcAddon
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -13193,7 +15645,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigSupertonic(GeneratedBaseModel):
         str | None,
         Field(
             alias="backendsDir",
-            description="Root directory for dynamically-loaded ggml backend `.so` files. Defaults to `prebuilds/`.",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
             min_length=1,
         ),
     ] = None
@@ -13289,10 +15741,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigParlerLavasrEnhancerModelSrcAddon(Enu
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -13397,10 +15852,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigParlerLavasrDenoiserModelSrcAddon(Enu
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -13681,7 +16139,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigParler(GeneratedBaseModel):
         str | None,
         Field(
             alias="backendsDir",
-            description="Root directory for dynamically-loaded ggml backend `.so` files. Defaults to `prebuilds/`.",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
             min_length=1,
         ),
     ] = None
@@ -13786,10 +16244,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3LavasrEnhancerModelSrcAddon
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -13894,10 +16355,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3LavasrDenoiserModelSrcAddon
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -14002,10 +16466,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3ReferenceAudioSrcAddon(Enum
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -14110,10 +16577,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3Cosyvoice3S3tokModelSrcAddo
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -14220,10 +16690,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3Cosyvoice3CampplusModelSrcA
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -14422,7 +16895,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3(GeneratedBaseModel):
         str | None,
         Field(
             alias="backendsDir",
-            description="Root directory for dynamically-loaded ggml backend `.so` files. Defaults to `prebuilds/`.",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
             min_length=1,
         ),
     ] = None
@@ -14484,10 +16957,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigAudio8Audio8CodecDecoderModelSrcAddon
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -14592,10 +17068,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigAudio8Audio8CodecEncoderModelSrcAddon
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -14700,10 +17179,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigAudio8ReferenceAudioSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -14898,7 +17380,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigAudio8(GeneratedBaseModel):
         str | None,
         Field(
             alias="backendsDir",
-            description="Root directory for dynamically-loaded ggml backend `.so` files. Defaults to `prebuilds/`.",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
             min_length=1,
         ),
     ] = None
@@ -14932,10 +17414,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigMossMossCodecDecoderModelSrcAddon(Enu
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -15040,10 +17525,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigMossMossCodecEncoderModelSrcAddon(Enu
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -15148,10 +17636,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigMossReferenceAudioSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -15254,10 +17745,13 @@ class LoadModelSrcRequestTtsGgmlModelConfigMossDialogueReferenceSrcsItemAddon(En
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -15429,7 +17923,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigMoss(GeneratedBaseModel):
         str | None,
         Field(
             alias="backendsDir",
-            description="Root directory for dynamically-loaded ggml backend `.so` files. Defaults to `prebuilds/`.",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
             min_length=1,
         ),
     ] = None
@@ -15464,6 +17958,261 @@ class LoadModelSrcRequestTtsGgmlModelConfigMoss(GeneratedBaseModel):
             min_length=1,
         ),
     ] = None
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigMossSfx(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    tts_engine: Annotated[
+        Literal["moss-sfx"],
+        Field(alias="ttsEngine", description="TTS engine: MOSS-SoundEffect-v2."),
+    ] = "moss-sfx"
+    use_gpu: Annotated[
+        bool | None,
+        Field(
+            alias="useGPU",
+            description="Route inference through a GPU backend (Metal / CUDA / Vulkan / OpenCL) when available. Default false.",
+        ),
+    ] = None
+    threads: Annotated[
+        int | None,
+        Field(
+            description="CPU thread count; overrides the hardware default.",
+            gt=0,
+            le=2147483647,
+        ),
+    ] = None
+    n_gpu_layers: Annotated[
+        int | None,
+        Field(
+            alias="nGpuLayers",
+            description="Model layers to offload to the GPU backend (99 = all, 0 = CPU). Takes effect on its own and wins over `useGPU`; when both are set they must agree.",
+            ge=-2147483648,
+            le=2147483647,
+        ),
+    ] = None
+    seed: Annotated[
+        int | None,
+        Field(
+            description="RNG seed for the engine’s stochastic stages (e.g. Chatterbox CFM/SineGen, Supertonic latent generation).",
+            ge=-2147483648,
+            le=2147483647,
+        ),
+    ] = None
+    backends_dir: Annotated[
+        str | None,
+        Field(
+            alias="backendsDir",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
+            min_length=1,
+        ),
+    ] = None
+    seconds: Annotated[
+        float | None,
+        Field(
+            description="Sound-effect duration in seconds, up to 30.", gt=0.0, le=30.0
+        ),
+    ] = None
+    negative_prompt: Annotated[
+        str | None,
+        Field(
+            alias="negativePrompt",
+            description="Description of sounds to avoid in the generated effect.",
+        ),
+    ] = None
+    steps: Annotated[
+        int | None,
+        Field(
+            description="Diffusion denoising steps; the native default is 100.",
+            ge=1,
+            le=1000,
+        ),
+    ] = None
+    guidance: Annotated[
+        float | None,
+        Field(
+            description="Classifier-free guidance scale for sound-effect generation.",
+            ge=1.0,
+            le=50.0,
+        ),
+    ] = None
+    shift: Annotated[
+        float | None,
+        Field(
+            description="Diffusion timestep schedule shift for sound-effect generation.",
+            gt=0.0,
+            le=100.0,
+        ),
+    ] = None
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigMossSpeechMossSpeechCodecModelSrcAddon(Enum):
+    llamacpp_completion = "llamacpp-completion"
+    whispercpp_transcription = "whispercpp-transcription"
+    bci_whispercpp_transcription = "bci-whispercpp-transcription"
+    llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
+    nmtcpp_translation = "nmtcpp-translation"
+    onnx_tts = "onnx-tts"
+    tts_ggml = "tts-ggml"
+    parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
+    ggml_ocr = "ggml-ocr"
+    sdcpp_generation = "sdcpp-generation"
+    audiogen_ggml = "audiogen-ggml"
+    ggml_vla = "ggml-vla"
+    ggml_classification = "ggml-classification"
+    llm = "llm"
+    whisper = "whisper"
+    bci = "bci"
+    embeddings = "embeddings"
+    nmt = "nmt"
+    parakeet = "parakeet"
+    tts = "tts"
+    ocr = "ocr"
+    diffusion = "diffusion"
+    audiogen = "audiogen"
+    vla = "vla"
+    classification = "classification"
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigMossSpeechMossSpeechCodecModelSrc(
+    GeneratedBaseModel
+):
+    src: Annotated[
+        str,
+        Field(
+            description="Location of the model file: a local file path, an HTTP(S) URL, or a `registry://` / `pear://` URI."
+        ),
+    ]
+    name: Annotated[
+        str | None,
+        Field(
+            description="Display name for this model instance; overrides the name derived from the source."
+        ),
+    ] = None
+    model_id: Annotated[
+        str | None,
+        Field(
+            alias="modelId",
+            description="Unique identifier used to reference the model in QVAC calls.",
+        ),
+    ] = None
+    registry_path: Annotated[
+        str | None,
+        Field(
+            alias="registryPath",
+            description="Registry-relative path to the model (set for registry-backed models).",
+        ),
+    ] = None
+    registry_source: Annotated[
+        str | None,
+        Field(
+            alias="registrySource",
+            description="Registry source identifier, e.g. `huggingface`.",
+        ),
+    ] = None
+    blob_core_key: Annotated[
+        str | None,
+        Field(
+            alias="blobCoreKey",
+            description="Hyperdrive blob core key for the model file.",
+        ),
+    ] = None
+    blob_index: Annotated[
+        float | None,
+        Field(
+            alias="blobIndex",
+            description="Internal: index of this shard within its Hyperdrive blob core, for sharded models.",
+        ),
+    ] = None
+    engine: Annotated[
+        str | None,
+        Field(
+            description="Canonical inference engine identifier, e.g. `llamacpp-completion`."
+        ),
+    ] = None
+    expected_size: Annotated[
+        float | None,
+        Field(
+            alias="expectedSize",
+            description="Expected total size of the model file in bytes.",
+        ),
+    ] = None
+    sha256_checksum: Annotated[
+        str | None,
+        Field(
+            alias="sha256Checksum",
+            description="Expected SHA-256 checksum of the model file.",
+        ),
+    ] = None
+    addon: Annotated[
+        LoadModelSrcRequestTtsGgmlModelConfigMossSpeechMossSpeechCodecModelSrcAddon
+        | Literal["vad"]
+        | None,
+        Field(
+            description="Inference addon / capability category this model belongs to."
+        ),
+    ] = None
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigMossSpeech(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    tts_engine: Annotated[
+        Literal["moss-speech"],
+        Field(alias="ttsEngine", description="TTS engine: MOSS-Speech."),
+    ] = "moss-speech"
+    use_gpu: Annotated[
+        bool | None,
+        Field(
+            alias="useGPU",
+            description="Route inference through a GPU backend (Metal / CUDA / Vulkan / OpenCL) when available. Default false.",
+        ),
+    ] = None
+    threads: Annotated[
+        int | None,
+        Field(
+            description="CPU thread count; overrides the hardware default.",
+            gt=0,
+            le=2147483647,
+        ),
+    ] = None
+    n_gpu_layers: Annotated[
+        int | None,
+        Field(
+            alias="nGpuLayers",
+            description="Model layers to offload to the GPU backend (99 = all, 0 = CPU). Takes effect on its own and wins over `useGPU`; when both are set they must agree.",
+            ge=-2147483648,
+            le=2147483647,
+        ),
+    ] = None
+    seed: Annotated[
+        int | None,
+        Field(
+            description="RNG seed for the engine’s stochastic stages (e.g. Chatterbox CFM/SineGen, Supertonic latent generation).",
+            ge=-2147483648,
+            le=2147483647,
+        ),
+    ] = None
+    backends_dir: Annotated[
+        str | None,
+        Field(
+            alias="backendsDir",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
+            min_length=1,
+        ),
+    ] = None
+    moss_speech_codec_model_src: Annotated[
+        str | LoadModelSrcRequestTtsGgmlModelConfigMossSpeechMossSpeechCodecModelSrc,
+        Field(
+            alias="mossSpeechCodecModelSrc",
+            description="MOSS-Speech codec GGUF source; modelSrc is the language model.",
+        ),
+    ]
 
 
 class LoadModelSrcRequestTtsGgml(GeneratedBaseModel):
@@ -15525,7 +18274,9 @@ class LoadModelSrcRequestTtsGgml(GeneratedBaseModel):
         | LoadModelSrcRequestTtsGgmlModelConfigParler
         | LoadModelSrcRequestTtsGgmlModelConfigCosyvoice3
         | LoadModelSrcRequestTtsGgmlModelConfigAudio8
-        | LoadModelSrcRequestTtsGgmlModelConfigMoss,
+        | LoadModelSrcRequestTtsGgmlModelConfigMoss
+        | LoadModelSrcRequestTtsGgmlModelConfigMossSfx
+        | LoadModelSrcRequestTtsGgmlModelConfigMossSpeech,
         Field(alias="modelConfig"),
     ]
 
@@ -15570,10 +18321,13 @@ class LoadModelSrcRequestGgmlOcrModelConfigDetectorModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -15844,7 +18598,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfigDevice(Enum):
     cpu = "cpu"
 
 
-class MainGpu2(RootModel[int]):
+class MainGpu4(RootModel[int]):
     root: Annotated[
         int,
         Field(
@@ -15909,10 +18663,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigClipLModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -16015,10 +18772,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigClipGModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -16121,10 +18881,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigT5XxlModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -16227,10 +18990,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigLlmModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -16328,15 +19094,129 @@ class LoadModelSrcRequestSdcppGenerationModelConfigLlmModelSrc(GeneratedBaseMode
     ] = None
 
 
+class LoadModelSrcRequestSdcppGenerationModelConfigProjectionModelSrcAddon(Enum):
+    llamacpp_completion = "llamacpp-completion"
+    whispercpp_transcription = "whispercpp-transcription"
+    bci_whispercpp_transcription = "bci-whispercpp-transcription"
+    llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
+    nmtcpp_translation = "nmtcpp-translation"
+    onnx_tts = "onnx-tts"
+    tts_ggml = "tts-ggml"
+    parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
+    ggml_ocr = "ggml-ocr"
+    sdcpp_generation = "sdcpp-generation"
+    audiogen_ggml = "audiogen-ggml"
+    ggml_vla = "ggml-vla"
+    ggml_classification = "ggml-classification"
+    llm = "llm"
+    whisper = "whisper"
+    bci = "bci"
+    embeddings = "embeddings"
+    nmt = "nmt"
+    parakeet = "parakeet"
+    tts = "tts"
+    ocr = "ocr"
+    diffusion = "diffusion"
+    audiogen = "audiogen"
+    vla = "vla"
+    classification = "classification"
+
+
+class LoadModelSrcRequestSdcppGenerationModelConfigProjectionModelSrc(
+    GeneratedBaseModel
+):
+    src: Annotated[
+        str,
+        Field(
+            description="Location of the model file: a local file path, an HTTP(S) URL, or a `registry://` / `pear://` URI."
+        ),
+    ]
+    name: Annotated[
+        str | None,
+        Field(
+            description="Display name for this model instance; overrides the name derived from the source."
+        ),
+    ] = None
+    model_id: Annotated[
+        str | None,
+        Field(
+            alias="modelId",
+            description="Unique identifier used to reference the model in QVAC calls.",
+        ),
+    ] = None
+    registry_path: Annotated[
+        str | None,
+        Field(
+            alias="registryPath",
+            description="Registry-relative path to the model (set for registry-backed models).",
+        ),
+    ] = None
+    registry_source: Annotated[
+        str | None,
+        Field(
+            alias="registrySource",
+            description="Registry source identifier, e.g. `huggingface`.",
+        ),
+    ] = None
+    blob_core_key: Annotated[
+        str | None,
+        Field(
+            alias="blobCoreKey",
+            description="Hyperdrive blob core key for the model file.",
+        ),
+    ] = None
+    blob_index: Annotated[
+        float | None,
+        Field(
+            alias="blobIndex",
+            description="Internal: index of this shard within its Hyperdrive blob core, for sharded models.",
+        ),
+    ] = None
+    engine: Annotated[
+        str | None,
+        Field(
+            description="Canonical inference engine identifier, e.g. `llamacpp-completion`."
+        ),
+    ] = None
+    expected_size: Annotated[
+        float | None,
+        Field(
+            alias="expectedSize",
+            description="Expected total size of the model file in bytes.",
+        ),
+    ] = None
+    sha256_checksum: Annotated[
+        str | None,
+        Field(
+            alias="sha256Checksum",
+            description="Expected SHA-256 checksum of the model file.",
+        ),
+    ] = None
+    addon: Annotated[
+        LoadModelSrcRequestSdcppGenerationModelConfigProjectionModelSrcAddon
+        | Literal["vad"]
+        | None,
+        Field(
+            description="Inference addon / capability category this model belongs to."
+        ),
+    ] = None
+
+
 class LoadModelSrcRequestSdcppGenerationModelConfigVaeModelSrcAddon(Enum):
     llamacpp_completion = "llamacpp-completion"
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -16441,10 +19321,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrcAdd
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -16549,10 +19432,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigUncondModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -16655,10 +19541,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigClipVisionModelSrcAddon(Enum)
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -16763,10 +19652,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigAudioVaeModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -16871,10 +19763,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigEmbeddingsConnectorsModelSrcA
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -16979,10 +19874,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigTaehvModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -17085,10 +19983,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigSceneSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -17212,6 +20113,15 @@ class LoadModelSrcRequestSdcppGenerationModelConfigWorld(GeneratedBaseModel):
         int | None,
         Field(description="Walk RNG seed.", ge=-9007199254740991, le=9007199254740991),
     ] = None
+    fit_steps: Annotated[
+        int | None,
+        Field(
+            alias="fitSteps",
+            description="Walk steps covered by memory fit. Defaults to 100; does not limit generation or retained history.",
+            ge=1,
+            le=1000000,
+        ),
+    ] = None
     threads: Annotated[
         Literal[-1] | Threads | None,
         Field(description="CPU threads for the session. -1 = auto-detect (default)."),
@@ -17302,10 +20212,13 @@ class LoadModelSrcRequestSdcppGenerationModelConfigUpscalerModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -17468,7 +20381,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfig(GeneratedBaseModel):
     mode: Annotated[
         LoadModelSrcRequestSdcppGenerationModelConfigMode | None,
         Field(
-            description="Operation mode for the diffusion plugin. `'diffusion'` (default) builds a full SD / SDXL / SD3 / FLUX pipeline from the primary model plus optional auxiliary text encoders, VAE, unconditional diffusion model, and ESRGAN upscaler, and exposes diffusion({ ... }). `'upscale'` builds a standalone ESRGAN upscaler from the primary model file alone (auxiliary model sources are ignored) and exposes upscale({ ... }). `'video'` builds a `VideoStableDiffusion` pipeline and exposes video({ ... }). The video layout is selected from the auxiliary sources: supplying `embeddingsConnectorsModelSrc` loads the LTX-2 layout (Gemma text encoder via `llmModelSrc` + video VAE + connectors, optional `audioVaeModelSrc` for synchronized audio). Without connectors, `llmModelSrc` + `vaeModelSrc` + `audioVaeModelSrc` selects MiniMax-H3 text-to-audio-video; otherwise the Wan layout is used (UMT5 text encoder via `t5XxlModelSrc` + VAE). On React Native, loading the video model on-device will likely fail because the video diffusion models currently shipped by QVAC are too large to load on typical mobile devices. `'world'` builds an ABot-World interactive world session and exposes worldCreateScene({ ... }) and worldStep({ ... }). It requires `taehvModelSrc`, plus `t5XxlModelSrc` + `vaeModelSrc` to create scenes and/or `sceneSrc` to walk a pre-built one. World sessions run only on the machine hosting the worker and need a dedicated GPU. At 832x480, the default walk with resident weights needs at least 20 GB free VRAM. `world.paramsBackend`, `world.maxVram`, and `world.streamLayers` can reduce that requirement.",
+            description="Operation mode for the diffusion plugin. `'diffusion'` (default) builds a full SD / SDXL / SD3 / FLUX / Qwen-Image pipeline from the primary model plus optional auxiliary text encoders, VAE, unconditional diffusion model, and ESRGAN upscaler, and exposes diffusion({ ... }). `'upscale'` builds a standalone ESRGAN upscaler from the primary model file alone (auxiliary model sources are ignored) and exposes upscale({ ... }). `'video'` builds a `VideoStableDiffusion` pipeline and exposes video({ ... }). The video layout is selected from the auxiliary sources: supplying `embeddingsConnectorsModelSrc` loads the LTX-2 layout (Gemma text encoder via `llmModelSrc` + video VAE + connectors, optional `audioVaeModelSrc` for synchronized audio). Without connectors, `llmModelSrc` + `vaeModelSrc` selects MiniMax-H3 text/image-to-video (optional `audioVaeModelSrc` for synchronized audio); otherwise the Wan layout is used (UMT5 text encoder via `t5XxlModelSrc` + VAE). On React Native, loading the video model on-device will likely fail because the video diffusion models currently shipped by QVAC are too large to load on typical mobile devices. `'world'` builds an ABot-World interactive world session and exposes worldCreateScene({ ... }) and worldStep({ ... }). It requires `taehvModelSrc`, plus `t5XxlModelSrc` + `vaeModelSrc` to create scenes and/or `sceneSrc` to walk a pre-built one. World sessions run only on the machine hosting the worker and need a dedicated GPU. At 832x480, the default walk with resident weights needs at least 20 GB free VRAM. `world.paramsBackend`, `world.maxVram`, and `world.streamLayers` can reduce that requirement.",
             title="LoadModelSrcRequestSdcppGenerationModelConfigMode",
         ),
     ] = "diffusion"
@@ -17484,7 +20397,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfig(GeneratedBaseModel):
         ),
     ] = None
     main_gpu: Annotated[
-        MainGpu2 | LoadModelSrcRequestSdcppGenerationModelConfigMainGpu | None,
+        MainGpu4 | LoadModelSrcRequestSdcppGenerationModelConfigMainGpu | None,
         Field(
             alias="main-gpu",
             description='GPU to pin when `device` is "gpu": a GPU-device index, "integrated", or "dedicated" (the discrete GPU with the most VRAM). Omit to let the backend choose the first enumerated device. Resolved against the addon\'s own ggml device enumeration, so it cannot desync from the device list the backend actually uses. If an explicit request cannot be satisfied (e.g. "integrated" with no integrated GPU, "dedicated" with no discrete GPU, or an out-of-range index) the addon falls back to CPU rather than substituting a different GPU. Stripped on mobile (single-GPU devices).',
@@ -17613,14 +20526,21 @@ class LoadModelSrcRequestSdcppGenerationModelConfig(GeneratedBaseModel):
         str | LoadModelSrcRequestSdcppGenerationModelConfigLlmModelSrc | None,
         Field(
             alias="llmModelSrc",
-            description="LLM text encoder model — required for FLUX.2 [klein] (Qwen3), Ideogram 4 (Qwen3-VL), LTX-2 video (Gemma), and MiniMax-H3 (H3-specific Qwen3-VL).",
+            description="LLM text encoder model — required for FLUX.2 [klein] (Qwen3), Qwen-Image-2.1 and Ideogram 4 (Qwen3-VL), LTX-2 video (Gemma), and MiniMax-H3 (H3-specific Qwen3-VL).",
+        ),
+    ] = None
+    projection_model_src: Annotated[
+        str | LoadModelSrcRequestSdcppGenerationModelConfigProjectionModelSrc | None,
+        Field(
+            alias="projectionModelSrc",
+            description="Vision projector for the LLM encoder. Required for Qwen-Image-2.1 reference editing with its GGUF Qwen3-VL encoder; optional for text-to-image. Requires llmModelSrc and diffusion mode.",
         ),
     ] = None
     vae_model_src: Annotated[
         str | LoadModelSrcRequestSdcppGenerationModelConfigVaeModelSrc | None,
         Field(
             alias="vaeModelSrc",
-            description="VAE decoder model — required for FLUX.2 [klein], Ideogram 4, LTX-2 video, and MiniMax-H3 video; optional for SDXL.",
+            description="VAE decoder model, required for Qwen-Image-2.1, FLUX.2 [klein], Ideogram 4, LTX-2 video, and MiniMax-H3 video; optional for SDXL.",
         ),
     ] = None
     high_noise_diffusion_model_src: Annotated[
@@ -17643,14 +20563,14 @@ class LoadModelSrcRequestSdcppGenerationModelConfig(GeneratedBaseModel):
         str | LoadModelSrcRequestSdcppGenerationModelConfigClipVisionModelSrc | None,
         Field(
             alias="clipVisionModelSrc",
-            description="OpenCLIP ViT-H/14 weights (`clip_vision_h.safetensors`). Required for Wan image-to-video (`img2vid`); omit for text-to-video-only pipelines. Not used by LTX-2 (its img2vid path needs no CLIP-vision projection).",
+            description="OpenCLIP ViT-H/14 weights (`clip_vision_h.safetensors`). Required for Wan image-to-video (`img2vid`); omit for text-to-video-only pipelines. Not used by LTX-2 or MiniMax-H3 (their img2vid paths need no CLIP-vision projection).",
         ),
     ] = None
     audio_vae_model_src: Annotated[
         str | LoadModelSrcRequestSdcppGenerationModelConfigAudioVaeModelSrc | None,
         Field(
             alias="audioVaeModelSrc",
-            description="Audio VAE decoder model — required for MiniMax-H3, optional for LTX-2. Enables synchronized audio muxed into the output AVI. Omit for silent LTX-2 video; unsupported by Wan.",
+            description="Audio VAE decoder model — optional for MiniMax-H3 and LTX-2. Enables synchronized audio muxed into the output AVI. Omit for silent video; unsupported by Wan.",
         ),
     ] = None
     embeddings_connectors_model_src: Annotated[
@@ -17679,7 +20599,7 @@ class LoadModelSrcRequestSdcppGenerationModelConfig(GeneratedBaseModel):
     world: Annotated[
         LoadModelSrcRequestSdcppGenerationModelConfigWorld | None,
         Field(
-            description="ABot-World session tuning — mode: 'world' only, rejected in every other mode. Forwarded to the native session as-is.",
+            description="ABot-World session tuning — mode: 'world' only, rejected in every other mode. Session settings reach the addon; fitSteps controls only memory fit.",
             title="LoadModelSrcRequestSdcppGenerationModelConfigWorld",
         ),
     ] = None
@@ -17766,10 +20686,13 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestepTextEncModelSrcAddon(Enum
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -17874,10 +20797,13 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestepLmModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -17980,10 +20906,13 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestepDitModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -18086,10 +21015,13 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestepVaeModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -18214,7 +21146,7 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestep(GeneratedBaseModel):
         str | None,
         Field(
             alias="backendsDir",
-            description="Advanced: override the prebuilds root scanned for dlopen’d ggml backend modules. Defaults to `<addon>/prebuilds`; needed on arm64, where the CPU backend ships as per-microarch module `.so` files.",
+            description="Advanced: directory scanned as given for dlopen’d ggml backend modules. Unset scans the directory the native module was loaded from. Needed on arm64, where the CPU backend ships as per-microarch module `.so` files.",
             min_length=1,
         ),
     ] = None
@@ -18222,16 +21154,17 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestep(GeneratedBaseModel):
         int | None,
         Field(
             alias="inferenceSteps",
-            description="DiT sampling steps; `0` (default) lets ACE-Step auto-pick per DiT architecture (turbo 8 / sft 50).",
+            description="DiT sampling steps, 0..1000; `0` (default) lets ACE-Step auto-pick per DiT architecture (turbo 8 / base and sft 50). A generation or edit can override it per run.",
             ge=0,
-            le=9007199254740991,
+            le=1000,
         ),
     ] = None
     shift: Annotated[
         float | None,
         Field(
-            description="Flow-matching time-shift; `0` (default) lets ACE-Step auto-pick per DiT architecture (turbo 3.0 / sft 1.0).",
+            description="Flow-matching time-shift; `0` (default) lets ACE-Step auto-pick per DiT architecture (turbo 3.0 / base and sft 1.0). A generation or edit can override it per run.",
             ge=0.0,
+            le=3.4028234663852886e38,
         ),
     ] = None
     n_gpu_layers: Annotated[
@@ -18273,15 +21206,24 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigAcestep(GeneratedBaseModel):
     ]
 
 
+class LoadModelSrcRequestAudiogenGgmlModelConfigMinimaxDevice(Enum):
+    cpu = "cpu"
+    gpu = "gpu"
+    auto = "auto"
+
+
 class LoadModelSrcRequestAudiogenGgmlModelConfigMinimaxLmModelSrcAddon(Enum):
     llamacpp_completion = "llamacpp-completion"
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -18384,10 +21326,13 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigMinimaxSynthModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -18514,8 +21459,15 @@ class LoadModelSrcRequestAudiogenGgmlModelConfigMinimax(GeneratedBaseModel):
         str | None,
         Field(
             alias="backendsDir",
-            description="Advanced: override the prebuilds root scanned for dlopen’d ggml backend modules. Defaults to `<addon>/prebuilds`; needed on arm64, where the CPU backend ships as per-microarch module `.so` files.",
+            description="Advanced: directory scanned as given for dlopen’d ggml backend modules. Unset scans the directory the native module was loaded from. Needed on arm64, where the CPU backend ships as per-microarch module `.so` files.",
             min_length=1,
+        ),
+    ] = None
+    device: Annotated[
+        LoadModelSrcRequestAudiogenGgmlModelConfigMinimaxDevice | None,
+        Field(
+            description="Where MiniMax runs, instead of `useGPU`: `'gpu'` requires a usable GPU and fails the load otherwise, `'auto'` (what `useGPU: true` means) falls back to the CPU, `'cpu'` never touches a GPU. Cannot be combined with `useGPU`.",
+            title="LoadModelSrcRequestAudiogenGgmlModelConfigMinimaxDevice",
         ),
     ] = None
     inference_steps: Annotated[
@@ -18620,9 +21572,16 @@ class LoadModelSrcRequestGgmlVlaModelFitPolicy(Enum):
     off = "off"
 
 
-class LoadModelSrcRequestGgmlVlaModelConfigBackend(Enum):
+class LoadModelSrcRequestGgmlVlaModelConfigBackendItem(Enum):
     auto = "auto"
     cpu = "cpu"
+    cuda = "cuda"
+    vulkan = "vulkan"
+    metal = "metal"
+    opencl = "opencl"
+    hip = "hip"
+    rocm = "rocm"
+    sycl = "sycl"
 
 
 class Embodiment(RootModel[str]):
@@ -18674,10 +21633,10 @@ class LoadModelSrcRequestGgmlVlaModelConfigEmbodiment(GeneratedBaseModel):
 
 class LoadModelSrcRequestGgmlVlaModelConfig(GeneratedBaseModel):
     backend: Annotated[
-        LoadModelSrcRequestGgmlVlaModelConfigBackend | None,
+        list[LoadModelSrcRequestGgmlVlaModelConfigBackendItem] | None,
         Field(
-            description="Backend selection passed to `VlaModel.load({ backend })`. `'auto'` (default) prefers an accepted GPU (Vulkan / Metal / OpenCL) and falls back to CPU. `'cpu'` forces CPU regardless of available accelerators.",
-            title="LoadModelSrcRequestGgmlVlaModelConfigBackend",
+            description="Ordered backend names, such as ['cuda', 'vulkan']. Omitted or ['auto'] uses the native default order. Supported GPU names: cuda, vulkan, metal, opencl, hip, rocm, sycl. Names are tried in order; if none has an accepted device, selection falls back to the native default order. ['cpu'] forces CPU regardless of available accelerators and must be used on its own.",
+            min_length=1,
         ),
     ] = None
     verbosity: Annotated[
@@ -18928,7 +21887,10 @@ class LoadModelSrcRequest(
         | LoadModelSrcRequestWhispercppTranscription
         | LoadModelSrcRequestBciWhispercppTranscription
         | LoadModelSrcRequestParakeetTranscription
+        | LoadModelSrcRequestMossTranscribe
         | LoadModelSrcRequestLlamacppEmbedding
+        | LoadModelSrcRequestLlamacppDecision
+        | LoadModelSrcRequestLlamacppRerank
         | LoadModelSrcRequestNmtcppTranslation
         | LoadModelSrcRequestTtsGgml
         | LoadModelSrcRequestGgmlOcr
@@ -18944,7 +21906,10 @@ class LoadModelSrcRequest(
         | LoadModelSrcRequestWhispercppTranscription
         | LoadModelSrcRequestBciWhispercppTranscription
         | LoadModelSrcRequestParakeetTranscription
+        | LoadModelSrcRequestMossTranscribe
         | LoadModelSrcRequestLlamacppEmbedding
+        | LoadModelSrcRequestLlamacppDecision
+        | LoadModelSrcRequestLlamacppRerank
         | LoadModelSrcRequestNmtcppTranslation
         | LoadModelSrcRequestTtsGgml
         | LoadModelSrcRequestGgmlOcr
@@ -19040,10 +22005,13 @@ class ReloadConfigRequestModelConfigVadModelSrcAddon(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     ggml_ocr = "ggml-ocr"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
@@ -19363,7 +22331,7 @@ class ReloadConfigRequestModelConfig(GeneratedBaseModel):
         str | None,
         Field(
             alias="backendsDir",
-            description="Root directory for dynamically-loaded ggml backend libraries. Defaults to the addon's own `prebuilds/`.",
+            description="Directory scanned as given for dynamically-loaded ggml backend `.so` files. Unset scans the directory the native module was loaded from.",
         ),
     ] = None
     vad_params: Annotated[
@@ -19513,6 +22481,7 @@ class ModelRegistryGetModelResponseModelAddon(Enum):
     tts = "tts"
     ocr = "ocr"
     parakeet = "parakeet"
+    moss_transcribe = "moss-transcribe"
     diffusion = "diffusion"
     audiogen = "audiogen"
     vla = "vla"
@@ -19525,11 +22494,14 @@ class ModelRegistryGetModelResponseModelEngine(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     ggml_ocr = "ggml-ocr"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
     ggml_vla = "ggml-vla"
@@ -19651,6 +22623,7 @@ class ModelRegistryListResponseModelsItemAddon(Enum):
     tts = "tts"
     ocr = "ocr"
     parakeet = "parakeet"
+    moss_transcribe = "moss-transcribe"
     diffusion = "diffusion"
     audiogen = "audiogen"
     vla = "vla"
@@ -19663,11 +22636,14 @@ class ModelRegistryListResponseModelsItemEngine(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     ggml_ocr = "ggml-ocr"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
     ggml_vla = "ggml-vla"
@@ -19782,6 +22758,7 @@ class ModelRegistrySearchRequestAddon(Enum):
     tts = "tts"
     ocr = "ocr"
     parakeet = "parakeet"
+    moss_transcribe = "moss-transcribe"
     diffusion = "diffusion"
     audiogen = "audiogen"
     vla = "vla"
@@ -19810,6 +22787,7 @@ class ModelRegistrySearchResponseModelsItemAddon(Enum):
     tts = "tts"
     ocr = "ocr"
     parakeet = "parakeet"
+    moss_transcribe = "moss-transcribe"
     diffusion = "diffusion"
     audiogen = "audiogen"
     vla = "vla"
@@ -19822,11 +22800,14 @@ class ModelRegistrySearchResponseModelsItemEngine(Enum):
     whispercpp_transcription = "whispercpp-transcription"
     bci_whispercpp_transcription = "bci-whispercpp-transcription"
     llamacpp_embedding = "llamacpp-embedding"
+    llamacpp_decision = "llamacpp-decision"
+    llamacpp_rerank = "llamacpp-rerank"
     nmtcpp_translation = "nmtcpp-translation"
     onnx_tts = "onnx-tts"
     tts_ggml = "tts-ggml"
     ggml_ocr = "ggml-ocr"
     parakeet_transcription = "parakeet-transcription"
+    moss_transcribe = "moss-transcribe"
     sdcpp_generation = "sdcpp-generation"
     audiogen_ggml = "audiogen-ggml"
     ggml_vla = "ggml-vla"
@@ -20372,6 +23353,38 @@ class RagProgressResponse(GeneratedBaseModel):
     timestamp: float
 
 
+class RerankRequest(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    query: Annotated[
+        str, Field(description="Query to score each document against.", min_length=1)
+    ]
+    documents: Annotated[
+        list[str],
+        Field(
+            description="Documents to score. Each one, paired with the query, must fit in `batch_size`.",
+            min_length=1,
+        ),
+    ]
+    model_id: Annotated[str, Field(alias="modelId", min_length=1)]
+    type: Literal["rerank"] = "rerank"
+    request_id: Annotated[str | None, Field(alias="requestId", min_length=1)] = None
+
+
+class RerankResponse(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["rerank"] = "rerank"
+    scores: Annotated[
+        list[float],
+        Field(
+            description="One relevance score per document, in input order. Higher is more relevant. Scores are the model's raw classifier output, so compare them within one model only."
+        ),
+    ]
+
+
 class ResumeRequest(GeneratedBaseModel):
     type: Literal["resume"] = "resume"
 
@@ -20407,7 +23420,11 @@ class StartRpcServerRequest(GeneratedBaseModel):
     ] = None
     port: Annotated[
         int | None,
-        Field(description="TCP port. Omit to allocate a free port.", ge=1, le=65535),
+        Field(
+            description="TCP port. Omit to let the native server bind a free port.",
+            ge=1,
+            le=65535,
+        ),
     ] = None
     device: Annotated[
         Device | Device1 | None,
@@ -20424,7 +23441,7 @@ class StartRpcServerRequest(GeneratedBaseModel):
         bool | None,
         Field(
             alias="expectRdma",
-            description="Require an RDMA-capable native backend. Reject before startup if unavailable.",
+            description="Require runtime RDMA availability. On Linux, this needs a capable native backend, libibverbs, an RDMA device, and GGML_RPC_NO_RDMA unset. Reject before startup if unavailable.",
         ),
     ] = None
     allow_non_loopback_host: Annotated[
@@ -20464,7 +23481,7 @@ class StartRpcServerResponse(GeneratedBaseModel):
         bool,
         Field(
             alias="rdmaCapable",
-            description="Whether the native backend supports RDMA. It falls back to TCP for clients without RDMA.",
+            description="Whether the server will try RDMA. On Linux, this requires a capable native backend, libibverbs, an RDMA device, and GGML_RPC_NO_RDMA unset. Each connection can still fall back to TCP.",
         ),
     ]
     type: Literal["startRpcServer"] = "startRpcServer"
@@ -20533,6 +23550,32 @@ class TextToSpeechRequestPace(Enum):
     fast = "fast"
 
 
+class AudioItem(RootModel[float]):
+    root: Annotated[float, Field(ge=-1.0, le=1.0)]
+
+
+class TextToSpeechRequestMessagesItemRole(Enum):
+    system = "system"
+    user = "user"
+    assistant = "assistant"
+
+
+class TextToSpeechRequestMessagesItem(GeneratedBaseModel):
+    role: Annotated[
+        TextToSpeechRequestMessagesItemRole,
+        Field(title="TextToSpeechRequestMessagesItemRole"),
+    ]
+    text: Annotated[str | None, Field(min_length=1)] = None
+    audio: Annotated[list[AudioItem] | None, Field(min_length=1)] = None
+    sample_rate: Annotated[
+        int | None, Field(alias="sampleRate", ge=8000, le=192000)
+    ] = None
+
+
+class ReplyVoiceItem(RootModel[float]):
+    root: Annotated[float, Field(ge=-1.0, le=1.0)]
+
+
 class TextToSpeechRequest(GeneratedBaseModel):
     model_id: Annotated[str, Field(alias="modelId")]
     request_id: Annotated[
@@ -20544,7 +23587,7 @@ class TextToSpeechRequest(GeneratedBaseModel):
         ),
     ] = None
     input_type: Annotated[str | None, Field(alias="inputType")] = "text"
-    text: Annotated[str, Field(min_length=1)]
+    text: Annotated[str | None, Field(min_length=1)] = None
     stream: bool | None = True
     sentence_stream: Annotated[bool | None, Field(alias="sentenceStream")] = False
     sentence_stream_locale: Annotated[
@@ -20616,6 +23659,66 @@ class TextToSpeechRequest(GeneratedBaseModel):
             description="Parler voice-template audio-quality descriptor.", min_length=1
         ),
     ] = None
+    seconds: Annotated[
+        float | None,
+        Field(
+            description="Sound-effect duration in seconds, up to 30.", gt=0.0, le=30.0
+        ),
+    ] = None
+    negative_prompt: Annotated[
+        str | None,
+        Field(
+            alias="negativePrompt",
+            description="Description of sounds to avoid in the generated effect.",
+        ),
+    ] = None
+    steps: Annotated[
+        int | None,
+        Field(
+            description="Diffusion denoising steps; the native default is 100.",
+            ge=1,
+            le=1000,
+        ),
+    ] = None
+    guidance: Annotated[
+        float | None,
+        Field(
+            description="Classifier-free guidance scale for sound-effect generation.",
+            ge=1.0,
+            le=50.0,
+        ),
+    ] = None
+    shift: Annotated[
+        float | None,
+        Field(
+            description="Diffusion timestep schedule shift for sound-effect generation.",
+            gt=0.0,
+            le=100.0,
+        ),
+    ] = None
+    audio: Annotated[list[AudioItem] | None, Field(min_length=1)] = None
+    sample_rate: Annotated[
+        int | None, Field(alias="sampleRate", ge=8000, le=192000)
+    ] = None
+    messages: list[TextToSpeechRequestMessagesItem] | None = None
+    system_prompt: Annotated[str | None, Field(alias="systemPrompt")] = None
+    reply_voice: Annotated[
+        list[ReplyVoiceItem] | None, Field(alias="replyVoice", min_length=1)
+    ] = None
+    reply_voice_sample_rate: Annotated[
+        int | None, Field(alias="replyVoiceSampleRate", ge=8000, le=192000)
+    ] = None
+    text_reply: Annotated[bool | None, Field(alias="textReply")] = None
+    max_reply_seconds: Annotated[
+        float | None, Field(alias="maxReplySeconds", ge=0.0, le=3600.0)
+    ] = None
+    max_new_tokens: Annotated[
+        int | None, Field(alias="maxNewTokens", ge=1, le=4096)
+    ] = None
+    greedy: bool | None = None
+    temperature: Annotated[float | None, Field(gt=0.0, le=10.0)] = None
+    top_p: Annotated[float | None, Field(alias="topP", gt=0.0, le=1.0)] = None
+    top_k: Annotated[int | None, Field(alias="topK", ge=0, le=2147483647)] = None
     type: Literal["textToSpeech"] = "textToSpeech"
 
 
@@ -20664,6 +23767,10 @@ class TextToSpeechResponse(GeneratedBaseModel):
         extra="forbid",
     )
     type: Literal["textToSpeech"] = "textToSpeech"
+    text: Annotated[
+        str | None,
+        Field(description="MOSS-Speech reply text, including text-only replies."),
+    ] = None
     buffer: list[float]
     done: bool
     sample_rate: Annotated[
@@ -20908,6 +24015,22 @@ class TranscribeRequest(GeneratedBaseModel):
         TranscribeRequestAudioChunkBase64 | TranscribeRequestAudioChunkFilePath,
         Field(alias="audioChunk"),
     ]
+    hotwords: Annotated[
+        list[Hotword] | None,
+        Field(
+            description="MOSS names and domain terms; at most 64 entries of 64 UTF-8 bytes each.",
+            max_length=64,
+        ),
+    ] = None
+    max_new_tokens: Annotated[
+        int | None,
+        Field(
+            alias="maxNewTokens",
+            description="MOSS generated-token limit; 0 uses the model default.",
+            ge=0,
+            le=2147483647,
+        ),
+    ] = None
     type: Literal["transcribe"] = "transcribe"
     request_id: Annotated[
         str | None,
@@ -21020,6 +24143,15 @@ class TranscribeResponseStats(GeneratedBaseModel):
     ] = None
 
 
+class TranscribeResponseSegmentSpeakerSegmentsItem(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    speaker_id: Annotated[int, Field(alias="speakerId", ge=0, le=9007199254740991)]
+    start_ms: Annotated[float, Field(alias="startMs", ge=0.0)]
+    end_ms: Annotated[float, Field(alias="endMs", ge=0.0)]
+
+
 class TranscribeResponseSegment(GeneratedBaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -21029,6 +24161,25 @@ class TranscribeResponseSegment(GeneratedBaseModel):
     end_ms: Annotated[float, Field(alias="endMs")]
     append: bool
     id: float
+    speaker_id: Annotated[
+        int | None,
+        Field(
+            alias="speakerId",
+            description="Zero-based speaker id for diarized transcription.",
+            ge=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    speaker: Annotated[
+        str | None, Field(description="MOSS speaker label, such as S01.")
+    ] = None
+    speaker_segments: Annotated[
+        list[TranscribeResponseSegmentSpeakerSegmentsItem] | None,
+        Field(
+            alias="speakerSegments",
+            description="Offline Sortformer/Nemotron diarization turns, with zero-based speaker ids and millisecond timestamps. Turns may overlap.",
+        ),
+    ] = None
     is_end_of_turn: Annotated[
         bool | None,
         Field(
@@ -21055,6 +24206,15 @@ class TranscribeResponseVad(GeneratedBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+    speaker_id: Annotated[
+        int | None,
+        Field(
+            alias="speakerId",
+            description="Dominant speaker for Parakeet diarization activity; omitted when unavailable.",
+            ge=0,
+            le=9007199254740991,
+        ),
+    ] = None
     speaking: bool
     probability: float
     source: Annotated[
@@ -21229,6 +24389,13 @@ class TranscribeStreamRequestParakeetStreamingConfig(GeneratedBaseModel):
     ] = None
     emit_partials: Annotated[bool | None, Field(alias="emitPartials")] = None
     emit_energy_vad: Annotated[bool | None, Field(alias="emitEnergyVad")] = None
+    emit_speaker_vad: Annotated[bool | None, Field(alias="emitSpeakerVad")] = None
+    diarization_threshold: Annotated[
+        float | None, Field(alias="diarizationThreshold", ge=0.0, le=1.0)
+    ] = None
+    diarization_min_segment_ms: Annotated[
+        int | None, Field(alias="diarizationMinSegmentMs", ge=0, le=9007199254740991)
+    ] = None
     spk_cache_enable: Annotated[bool | None, Field(alias="spkCacheEnable")] = None
     spk_cache_len: Annotated[
         int | None, Field(alias="spkCacheLen", gt=0, le=9007199254740991)
@@ -21383,6 +24550,15 @@ class TranscribeStreamResponseStats(GeneratedBaseModel):
     ] = None
 
 
+class TranscribeStreamResponseSegmentSpeakerSegmentsItem(GeneratedBaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    speaker_id: Annotated[int, Field(alias="speakerId", ge=0, le=9007199254740991)]
+    start_ms: Annotated[float, Field(alias="startMs", ge=0.0)]
+    end_ms: Annotated[float, Field(alias="endMs", ge=0.0)]
+
+
 class TranscribeStreamResponseSegment(GeneratedBaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -21392,6 +24568,25 @@ class TranscribeStreamResponseSegment(GeneratedBaseModel):
     end_ms: Annotated[float, Field(alias="endMs")]
     append: bool
     id: float
+    speaker_id: Annotated[
+        int | None,
+        Field(
+            alias="speakerId",
+            description="Zero-based speaker id for diarized transcription.",
+            ge=0,
+            le=9007199254740991,
+        ),
+    ] = None
+    speaker: Annotated[
+        str | None, Field(description="MOSS speaker label, such as S01.")
+    ] = None
+    speaker_segments: Annotated[
+        list[TranscribeStreamResponseSegmentSpeakerSegmentsItem] | None,
+        Field(
+            alias="speakerSegments",
+            description="Offline Sortformer/Nemotron diarization turns, with zero-based speaker ids and millisecond timestamps. Turns may overlap.",
+        ),
+    ] = None
     is_end_of_turn: Annotated[
         bool | None,
         Field(
@@ -21418,6 +24613,15 @@ class TranscribeStreamResponseVad(GeneratedBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+    speaker_id: Annotated[
+        int | None,
+        Field(
+            alias="speakerId",
+            description="Dominant speaker for Parakeet diarization activity; omitted when unavailable.",
+            ge=0,
+            le=9007199254740991,
+        ),
+    ] = None
     speaking: bool
     probability: float
     source: Annotated[
@@ -22916,7 +26120,13 @@ class Request_1(RootModel[CancelRequestRequest | CancelRequestBroad]):
     ]
 
 
-class Request_2(
+class Request_2(RootModel[DecideSingleRequest | DecideBatchRequest]):
+    root: Annotated[
+        DecideSingleRequest | DecideBatchRequest, Field(title="DecideRequest")
+    ]
+
+
+class Request_3(
     RootModel[
         DeleteCacheAllRequest | DeleteCacheAutoRequest | DeleteCacheKvEntryRequest
     ]
@@ -22927,7 +26137,7 @@ class Request_2(
     ]
 
 
-class Request_3(
+class Request_4(
     RootModel[FinetuneRunRequest | FinetuneGetStateRequest | FinetuneStopRequest]
 ):
     root: Annotated[
@@ -22936,13 +26146,13 @@ class Request_3(
     ]
 
 
-class Request_4(RootModel[LoadModelSrcRequest | ReloadConfigRequest]):
+class Request_5(RootModel[LoadModelSrcRequest | ReloadConfigRequest]):
     root: Annotated[
         LoadModelSrcRequest | ReloadConfigRequest, Field(title="LoadModelRequest")
     ]
 
 
-class Request_5(
+class Request_6(
     RootModel[
         RagRequestChunk
         | RagRequestIngest
@@ -22996,13 +26206,13 @@ class Response_1(
     ]
 
 
-class Request_6(RootModel[TranslateNmtRequest | TranslateLlmRequest]):
+class Request_7(RootModel[TranslateNmtRequest | TranslateLlmRequest]):
     root: Annotated[
         TranslateNmtRequest | TranslateLlmRequest, Field(title="TranslateRequest")
     ]
 
 
-class Request_7(
+class Request_8(
     RootModel[
         VectorIndexRequestCreate
         | VectorIndexRequestLoad
@@ -23041,16 +26251,17 @@ class Request(
         | CompletionOrchestrateRequest
         | CompletionStreamRequest
         | Request_2
+        | Request_3
         | DiffusionStreamRequest
         | DiscoverRpcServersRequest
         | DownloadAssetRequest
         | EmbedRequest
-        | Request_3
+        | Request_4
         | GetLoadedModelInfoRequest
         | GetModelInfoRequest
         | GetSystemResourcesRequest
         | HeartbeatRequest
-        | Request_4
+        | Request_5
         | LoggingStreamRequest
         | ModelRegistryGetModelRequest
         | ModelRegistryListRequest
@@ -23058,7 +26269,8 @@ class Request(
         | OcrStreamRequest
         | PluginInvokeRequest
         | PluginInvokeStreamRequest
-        | Request_5
+        | Request_6
+        | RerankRequest
         | ResumeRequest
         | StartRpcServerRequest
         | StateRequest
@@ -23068,10 +26280,10 @@ class Request(
         | TextToSpeechStreamRequest
         | TranscribeRequest
         | TranscribeStreamRequest
-        | Request_6
+        | Request_7
         | UnloadModelRequest
         | UpscaleStreamRequest
-        | Request_7
+        | Request_8
         | VideoStreamRequest
         | WorldSceneStreamRequest
         | WorldStepStreamRequest
@@ -23090,16 +26302,17 @@ class Request(
         | CompletionOrchestrateRequest
         | CompletionStreamRequest
         | Request_2
+        | Request_3
         | DiffusionStreamRequest
         | DiscoverRpcServersRequest
         | DownloadAssetRequest
         | EmbedRequest
-        | Request_3
+        | Request_4
         | GetLoadedModelInfoRequest
         | GetModelInfoRequest
         | GetSystemResourcesRequest
         | HeartbeatRequest
-        | Request_4
+        | Request_5
         | LoggingStreamRequest
         | ModelRegistryGetModelRequest
         | ModelRegistryListRequest
@@ -23107,7 +26320,8 @@ class Request(
         | OcrStreamRequest
         | PluginInvokeRequest
         | PluginInvokeStreamRequest
-        | Request_5
+        | Request_6
+        | RerankRequest
         | ResumeRequest
         | StartRpcServerRequest
         | StateRequest
@@ -23117,10 +26331,10 @@ class Request(
         | TextToSpeechStreamRequest
         | TranscribeRequest
         | TranscribeStreamRequest
-        | Request_6
+        | Request_7
         | UnloadModelRequest
         | UpscaleStreamRequest
-        | Request_7
+        | Request_8
         | VideoStreamRequest
         | WorldSceneStreamRequest
         | WorldStepStreamRequest,
@@ -23169,6 +26383,7 @@ class Response(
         | ClassifyResponse
         | CompletionOrchestrateResponse
         | CompletionStreamResponse
+        | DecideResponse
         | DeleteCacheResponse
         | DiffusionStreamResponse
         | DiscoverRpcServersResponse
@@ -23192,6 +26407,7 @@ class Response(
         | PluginInvokeStreamResponse
         | Response_1
         | RagProgressResponse
+        | RerankResponse
         | ResumeResponse
         | StartRpcServerResponse
         | StateResponse
@@ -23222,6 +26438,7 @@ class Response(
         | ClassifyResponse
         | CompletionOrchestrateResponse
         | CompletionStreamResponse
+        | DecideResponse
         | DeleteCacheResponse
         | DiffusionStreamResponse
         | DiscoverRpcServersResponse
@@ -23245,6 +26462,7 @@ class Response(
         | PluginInvokeStreamResponse
         | Response_1
         | RagProgressResponse
+        | RerankResponse
         | ResumeResponse
         | StartRpcServerResponse
         | StateResponse

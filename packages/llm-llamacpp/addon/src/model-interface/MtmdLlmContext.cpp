@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
 #include <system_error>
+#include <vector>
 
 #include <common/log.h>
 #include <gguf.h>
@@ -12,8 +14,11 @@
 #include <llama/mtmd/mtmd-helper.h>
 #include <llama/mtmd/mtmd.h>
 
+#include "CacheCheckpointFile.hpp"
 #include "CacheManager.hpp"
 #include "GenerationParamsApply.hpp"
+#include "ImagePixelLimit.hpp"
+#include "ImageTokenBudget.hpp"
 #include "MediaLoadOrder.hpp"
 #include "RequestRecoveryHelpers.hpp"
 #include "addon/LlmErrors.hpp"
@@ -40,22 +45,50 @@ bool isFileInitialized(const std::filesystem::path& path) {
   const auto size = std::filesystem::file_size(path, errorCode);
   return !errorCode && size != 0;
 }
+
+// llama-server's `process_mtmd_chunk` post-decode callback: hands each image
+// or audio embedding batch to the speculative state. The helper's sub-batch is
+// wrapped, without copying, in the llama_batch SpeculativeRuntime takes; both
+// lay out positions section-major.
+int32_t
+speculativePostDecode(const mtmd_helper_embd_batch* embdBatch, void* userData) {
+  const auto* runtime =
+      static_cast<const speculative::SpeculativeRuntime*>(userData);
+  const auto nTokens = static_cast<std::size_t>(embdBatch->n_tokens);
+  llama_seq_id seqId = embdBatch->seq_id;
+  std::vector<int32_t> nSeqId(nTokens, 1);
+  std::vector<llama_seq_id*> seqIds(nTokens, &seqId);
+  llama_batch batch{};
+  batch.n_tokens = embdBatch->n_tokens;
+  batch.embd = const_cast<float*>(embdBatch->embd);
+  batch.pos = const_cast<llama_pos*>(embdBatch->pos);
+  batch.n_seq_id = nSeqId.data();
+  batch.seq_id = seqIds.data();
+  return runtime->process(batch) ? 0 : 1;
+}
 } // namespace
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 MtmdLlmContext::MtmdLlmContext(
-    common_params& commonParams, common_init_result_ptr llamaInit)
-    : llamaInit_(std::move(llamaInit)), params_(commonParams) {
+    common_params& commonParams, common_init_result_ptr llamaInit,
+    uint64_t maxImagePixels,
+    std::unique_ptr<
+        qvac_lib_inference_addon_llama::speculative::SpeculativeRuntime>
+        speculative)
+    : llamaInit_(std::move(llamaInit)), speculative_(std::move(speculative)),
+      params_(commonParams), maxImagePixels_(maxImagePixels) {
   modelCtx_.model = llamaInit_->model();
   modelCtx_.lctx = llamaInit_->context();
+  modelCtx_.speculative = speculative_.get();
   initializeCommonState();
 }
 
 MtmdLlmContext::MtmdLlmContext(
     const common_params& commonParams, const LlmModelContext& shared,
-    mtmd_context* sharedVision, llama_seq_id seqId, llama_pos perSeqCtxCeiling)
+    mtmd_context* sharedVision, llama_seq_id seqId, llama_pos perSeqCtxCeiling,
+    uint64_t maxImagePixels)
     : sharedVision_(sharedVision), modelCtx_(shared), params_(commonParams),
-      perSeqCtxCeiling_(perSeqCtxCeiling) {
+      maxImagePixels_(maxImagePixels), perSeqCtxCeiling_(perSeqCtxCeiling) {
   seqId_ = seqId;
   if (sharedVision_ == nullptr) {
     throw qvac_errors::StatusError(
@@ -70,21 +103,18 @@ MtmdLlmContext::MtmdLlmContext(
 void MtmdLlmContext::initializeCommonState() {
   if (modelCtx_.model == nullptr) {
     throw qvac_errors::StatusError(
-        ADDON_ID,
-        qvac_errors::general_error::toString(UnableToLoadModel),
-        "Failed to initialize model.");
+        ADDON_ID, toString(UnableToLoadModel), "Failed to initialize model");
   }
 
   if (modelCtx_.lctx == nullptr) {
     throw qvac_errors::StatusError(
-        ADDON_ID,
-        qvac_errors::general_error::toString(UnableToLoadModel),
-        "Failed to initialize context");
+        ADDON_ID, toString(UnableToLoadModel), "Failed to initialize context");
   }
 
   if (modelCtx_.vocab == nullptr) {
     modelCtx_.vocab = llama_model_get_vocab(modelCtx_.model);
   }
+  spec_.bind(modelCtx_.speculative, seqId_);
 
   // An empty `chat_template` uses the template embedded in the GGUF.
   tmpls_ = common_chat_templates_init(modelCtx_.model, params_.chat_template);
@@ -187,6 +217,12 @@ void MtmdLlmContext::initializeCommonState() {
           llama_model_is_recurrent(model),
           llama_model_is_hybrid(model),
           isDeepSeekV4);
+  slidingWindowCheckpoints_ =
+      (model != nullptr) && !needsFullStateSnapshot_ &&
+      qvac_lib_inference_addon_llama::utils::takesSlidingWindowCheckpoints(
+          llama_model_n_swa(model),
+          params_.swa_full,
+          llama_n_ctx_seq(modelCtx_.lctx));
   snapshotScope_ =
       qvac_lib_inference_addon_llama::utils::untrimmableSnapshotScope();
   requestRollback_.setScope(snapshotScope_);
@@ -216,56 +252,35 @@ void MtmdLlmContext::initVisionContext() {
   mparams.image_min_tokens = params_.image_min_tokens;
   mparams.image_max_tokens = params_.image_max_tokens;
 
-  // When the caller has not set an explicit cap, apply a sensible default for
-  // Qwen-VL encoders only. Qwen-VL allows up to 4096 image tokens, far more
-  // than the ~1024 it needs for grounding, so an uncapped high-resolution
-  // image pays O(n_patches^2) attention for tokens the model cannot use (and
-  // can even destabilize generation). 2048 stays well above the documented
-  // grounding floor while roughly halving the worst-case encode + image
-  // prefill. We gate on the mmproj projector type rather than applying a
-  // blanket value so that smaller-budget dynamic encoders (e.g. LightOnOCR /
-  // Pixtral at 1024, LFM2 at 256) are never *raised* above their native limit;
-  // fixed-grid encoders (SigLIP/SmolVLM) are unaffected regardless. Fully
-  // overridable via image_max_tokens config.
+  // When the caller has not set an explicit cap, apply the projector's default
+  // from defaultImageMaxTokens. Fully overridable via image_max_tokens config.
   if (mparams.image_max_tokens <= 0) {
-    static constexpr int kQwenVlDefaultImageMaxTokens = 2048;
-    // Respect an explicit image_min_tokens floor. mtmd converts both knobs into
-    // min/max pixel budgets and throws when max_pixels < min_pixels, so if the
-    // caller asked for at least as many tokens as our default cap, injecting
-    // the default max would make a min-only config fail to load. Leave the
-    // budget to the caller / model default in that case.
-    if (mparams.image_min_tokens < kQwenVlDefaultImageMaxTokens) {
-      gguf_init_params gp = {};
-      gp.no_alloc = true;
-      if (gguf_context* gc = gguf_init_from_file(clipPath, gp)) {
-        // Mirror mtmd's projector-type resolution: it reads clip.projector_type
-        // first and, for mixed vision+audio mmprojs, falls back to
-        // clip.vision.projector_type. Reading only the generic key would miss
-        // Qwen Omni vision encoders (e.g. Qwen3-Omni stores its vision merger
-        // under the vision key), silently leaving them on the uncapped path.
-        auto readProjType = [&](const char* key) -> std::string {
-          const int64_t id = gguf_find_key(gc, key);
-          if (id >= 0 && gguf_get_kv_type(gc, id) == GGUF_TYPE_STRING) {
-            return gguf_get_val_str(gc, id);
-          }
-          return {};
-        };
-        std::string projType = readProjType("clip.projector_type");
-        if (projType.empty()) {
-          projType = readProjType("clip.vision.projector_type");
+    gguf_init_params gp = {};
+    gp.no_alloc = true;
+    if (gguf_context* gc = gguf_init_from_file(clipPath, gp)) {
+      // Mirror mtmd's projector-type resolution: it reads clip.projector_type
+      // first and, for mixed vision+audio mmprojs, falls back to
+      // clip.vision.projector_type. Qwen Omni and Gemma 4 store their vision
+      // projector only under the vision key.
+      auto readProjType = [&](const char* key) -> std::string {
+        const int64_t id = gguf_find_key(gc, key);
+        if (id >= 0 && gguf_get_kv_type(gc, id) == GGUF_TYPE_STRING) {
+          return gguf_get_val_str(gc, id);
         }
-        // Qwen vision mergers: qwen2vl_merger / qwen2.5vl_merger /
-        // qwen3vl_merger. Plus qwen2.5o, the Qwen2.5-Omni combined projector,
-        // which mtmd resolves to the Qwen2.5-VL vision merger for the vision
-        // modality.
-        const bool isQwenVlMerger = projType.rfind("qwen", 0) == 0 &&
-                                    projType.find("vl") != std::string::npos;
-        const bool isQwenOmni = projType == "qwen2.5o";
-        if (isQwenVlMerger || isQwenOmni) {
-          mparams.image_max_tokens = kQwenVlDefaultImageMaxTokens;
-        }
-        gguf_free(gc);
+        return {};
+      };
+      std::string projType = readProjType("clip.projector_type");
+      if (projType.empty()) {
+        projType = readProjType("clip.vision.projector_type");
       }
+      const int defaultMax = defaultImageMaxTokens(projType);
+      // Respect an explicit image_min_tokens floor. mtmd converts both knobs
+      // into min/max pixel budgets and throws when max_pixels < min_pixels, so
+      // a min at or above the default cap leaves the budget to the caller.
+      if (defaultMax > 0 && mparams.image_min_tokens < defaultMax) {
+        mparams.image_max_tokens = defaultMax;
+      }
+      gguf_free(gc);
     }
   }
   ctxVision_.reset(mtmd_init_from_file(clipPath, modelCtx_.model, mparams));
@@ -277,13 +292,22 @@ void MtmdLlmContext::initVisionContext() {
   }
 }
 
-bool MtmdLlmContext::checkAntiprompt() {
+bool MtmdLlmContext::checkAntiprompt(
+    size_t unemittedTail, llama_token emitted) {
   if (antipromptLower_.empty() && templateStops_.empty()) {
     return false;
   }
   constexpr int kNPrev = 32;
+  const int tail = static_cast<int>(unemittedTail);
   std::string lastOutput =
-      common_sampler_prev_str(smpl_.get(), modelCtx_.lctx, kNPrev);
+      common_sampler_prev_str(smpl_.get(), modelCtx_.lctx, kNPrev + tail);
+  if (tail > 0) {
+    // See TextLlmContext::checkAntiprompt.
+    const size_t unemittedBytes =
+        common_sampler_prev_str(smpl_.get(), modelCtx_.lctx, tail).size();
+    lastOutput.resize(
+        lastOutput.size() - std::min(unemittedBytes, lastOutput.size()));
+  }
 
   // See TextLlmContext::checkAntiprompt: the same shared matcher, so the
   // duplicated stop handling in the two contexts cannot drift apart on the
@@ -294,7 +318,8 @@ bool MtmdLlmContext::checkAntiprompt() {
   }
 
   // check for reverse prompt using special tokens
-  llama_token lastToken = common_sampler_last(smpl_.get());
+  const llama_token lastToken =
+      unemittedTail > 0 ? emitted : common_sampler_last(smpl_.get());
   for (auto token : antipromptTokens_) {
     if (token == lastToken) {
       return true;
@@ -387,9 +412,19 @@ void MtmdLlmContext::tokenizeChat(
       inputs.parallel_tool_calls = *renderOverrides_.parallelToolCalls;
     }
   }
+  const Tokenizer tokenize = [this](const std::string& text) {
+    return ::common_tokenize(modelCtx_.lctx, text, false, true);
+  };
+  // See TextLlmContext::tokenizeChat. Media markers must match the loaded
+  // bitmaps, so a request carrying media keeps the full render.
+  std::optional<PromptRenderResult> primed =
+      isPrefillOnlyRequest_ && bitmaps_.entries.empty()
+          ? renderWithoutUserTurn(tmpls_.get(), inputs, tokenize)
+          : std::nullopt;
   // See TextLlmContext::tokenizeChat: not const so the prompt and stop list
   // move out instead of being copied per request.
-  PromptRenderResult rendered = getPrompt(tmpls_.get(), inputs);
+  PromptRenderResult rendered =
+      primed.has_value() ? std::move(*primed) : getPrompt(tmpls_.get(), inputs);
   formattedChat = std::move(rendered.prompt);
   if (rendered.toolDefinitionsDropped) {
     ++toolDefinitionsDropped_;
@@ -414,9 +449,6 @@ void MtmdLlmContext::tokenizeChat(
     throw qvac_errors::StatusError(ADDON_ID, toString(EmptyPrompt), errorMsg);
   }
 
-  const Tokenizer tokenize = [this](const std::string& text) {
-    return ::common_tokenize(modelCtx_.lctx, text, false, true);
-  };
   // Template stop strings are per request: replace, never accumulate. No
   // template any qvac package ships populates `additional_stops`, so these
   // lists are empty for those models — but see TextLlmContext::tokenizeChat:
@@ -495,7 +527,7 @@ void MtmdLlmContext::tokenizeChat(
   // TextLlmContext::tokenizeChat.
   generationPromptTokens_ = 0;
   const size_t nChunks = chunks.size();
-  if (needsFullStateSnapshot_ && cacheReconciliationEnabled_ &&
+  if (takesHistoryCheckpoints() && cacheReconciliationEnabled_ &&
       inputs.add_generation_prompt && nChunks > 0 &&
       mtmd_input_chunk_get_type(chunks[nChunks - 1]) ==
           MTMD_INPUT_CHUNK_TYPE_TEXT) {
@@ -617,6 +649,7 @@ LlmContext::EvalMessageResult MtmdLlmContext::evalMessageWithTools(
                                    ? reconciledPlan.totalPositions()
                                    : mtmd_helper_get_n_pos(chunksPtr);
   throwIfOverflows(current_.pos, current_.cacheTokens, nPositions, nTokens);
+  spec_.setPromptEnd(current_.pos + nPositions);
 
   snapshotPreRequestCursor();
 
@@ -746,7 +779,9 @@ LlmContext::EvalMessageResult MtmdLlmContext::evalMessageWithTools(
       if (skip == textTokenCount) {
         continue;
       }
-      if (skip > 0 || checkpointOffset.has_value()) {
+      // Speculative decoding needs every decoded text batch
+      // (`processSpeculativeBatch`), which the mtmd helper does not expose.
+      if (skip > 0 || checkpointOffset.has_value() || spec_.enabled()) {
         LlamaBatch textBatch(params_.n_batch, 0, 1);
         for (size_t offset = skip; offset < textTokenCount;) {
           textBatch->n_tokens = 0;
@@ -769,6 +804,7 @@ LlmContext::EvalMessageResult MtmdLlmContext::evalMessageWithTools(
                 toString(FailedToDecode),
                 "[MtmdLlm] failed to decode reconciled text suffix");
           }
+          processSpeculativeBatch(*textBatch);
           if (checkpointOffset.has_value() && offset == *checkpointOffset) {
             captureHistoryCheckpoint(nPastLocal);
           }
@@ -821,9 +857,14 @@ LlmContext::EvalMessageResult MtmdLlmContext::evalMessageWithTools(
             0,
             params_.n_batch,
             &nPastLocal,
-            /*callback=*/nullptr,
-            /*user_data=*/nullptr);
+            // llama-server's post-decode hook; MTP skips embedding batches.
+            modelCtx_.speculative != nullptr ? speculativePostDecode : nullptr,
+            modelCtx_.speculative);
       }
+    } else if (
+        modelCtx_.speculative != nullptr &&
+        mtmd_input_chunk_get_type(chunk) == MTMD_INPUT_CHUNK_TYPE_AUDIO) {
+      res = evalAudioChunkSpeculative(chunk, nPastLocal, 0, &nPastLocal);
     } else {
       res = mtmd_helper_eval_chunk_single(
           visionContext(),
@@ -854,6 +895,9 @@ LlmContext::EvalMessageResult MtmdLlmContext::evalMessageWithTools(
   // The single-prompt path does not go through `onPrefillComplete`, so mark
   // the phase here: from now on a cancel keeps the request's state.
   prefillComplete_ = true;
+  spec_.reset();
+  spec_.resetStats();
+  spec_.begin({});
   if (cacheRequestActive_) {
     residentLedger_ = pendingPromptLedger_;
     rebuildSamplerFromLedger(residentLedger_);
@@ -1013,7 +1057,10 @@ LlmContext::GenerateResponseResult MtmdLlmContext::generateResponse(
         .rollbackOk = handleUserCancel(outputCallback)};
   }
 
-  while (nRemain != 0) {
+  if (spec_.enabled()) {
+    generateSpeculative(outputCallback, nRemain);
+  }
+  while (!spec_.enabled() && nRemain != 0) {
     if (stopGeneration_.load()) {
       stopGeneration_.store(false);
       return {
@@ -1237,6 +1284,12 @@ void MtmdLlmContext::loadMedia(const std::vector<uint8_t>& media) {
         ADDON_ID, toString(UnableToLoadModel), errorMsg);
   }
 
+  try {
+    image_pixel_limit::checkBuffer(media.data(), media.size(), maxImagePixels_);
+  } catch (const qvac_errors::StatusError&) {
+    resetMedia();
+    throw;
+  }
   mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_buf(
                        visionContext(),
                        media.data(),
@@ -1278,26 +1331,25 @@ void MtmdLlmContext::loadMedia(const std::string& fname) {
         ADDON_ID, toString(UnableToLoadModel), errorMsg);
   }
 
-  mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_file(
-                       visionContext(),
-                       fname.c_str(),
-                       /*placeholder=*/false,
-                       mtmd_helper_init_opt_default())
-                       .bitmap);
-  if (!bmp.ptr) {
+  std::vector<uint8_t> media;
+  try {
+    media = image_pixel_limit::readRegularFile(fname);
+  } catch (const qvac_errors::StatusError&) {
     resetMedia();
-    std::string errorMsg = string_format(
-        "[MtmdLlm] Failed to load media from file: %s\n", fname.c_str());
+    throw;
+  }
+  try {
+    loadMedia(media);
+  } catch (const qvac_errors::StatusError& error) {
+    resetMedia();
+    std::string reason = error.what();
+    reason.erase(reason.find_last_not_of(" \t\r\n") + 1);
     throw qvac_errors::StatusError(
         ADDON_ID,
         qvac_errors::general_error::toString(
             qvac_errors::general_error::InvalidArgument),
-        errorMsg);
+        "[MtmdLlm] Failed to load media from file: " + fname + ": " + reason);
   }
-  const std::string mediaId =
-      std::to_string(cache::hashBytes(bmp.data(), bmp.n_bytes()));
-  bmp.set_id(mediaId.c_str());
-  bitmaps_.entries.push_back(std::move(bmp));
 }
 
 void MtmdLlmContext::resetState(bool resetStats) {
@@ -1505,16 +1557,32 @@ PrefillPlan MtmdLlmContext::reconcilePrompt(
     // The rollback target moves to the divergence point (see the same branch
     // in TextLlmContext::reconcilePrompt); no snapshot is written.
     llama_pos reusePos = residentLedger_.positions(reuseTarget);
+    bool restored = false;
     if (!canTrimSequenceTo(modelCtx_.lctx, reusePos)) {
-      // Sliding-window cells before the divergence are gone (see
+      // Sliding-window cells before the divergence are gone; restore a
+      // checkpoint within the shared prefix, or go cold (see
       // TextLlmContext::reconcilePrompt).
+      const size_t sharedEntries = reuseTarget;
       reuseTarget = 0;
       reuse = 0;
       reusePos = 0;
       checkpoint = "cold";
+      for (CacheCheckpoint* candidate : cache::usableCheckpointsLongestFirst(
+               cacheCheckpoints_, fullLedger, sharedEntries)) {
+        if (restoreSequenceState(modelCtx_.lctx, seqId_, candidate->state)) {
+          residentLedger_ = candidate->ledger;
+          reuse = residentLedger_.entries.size();
+          reusePos = residentLedger_.positions();
+          checkpoint = std::to_string(reuse);
+          restored = true;
+          break;
+        }
+      }
     }
-    clearSequenceMemory(modelCtx_.lctx, reusePos, -1);
-    residentLedger_.truncate(reuseTarget);
+    if (!restored) {
+      clearSequenceMemory(modelCtx_.lctx, reusePos, -1);
+      residentLedger_.truncate(reuseTarget);
+    }
     current_.pos = reusePos;
     refreshCurrentCacheTokensFromMemory();
     preRequestLedger_ = residentLedger_;
@@ -1600,7 +1668,7 @@ void MtmdLlmContext::commitCacheRequest() {
 }
 
 void MtmdLlmContext::captureHistoryCheckpoint(llama_pos pos) {
-  if (!needsFullStateSnapshot_ || !cacheRequestActive_ ||
+  if (!takesHistoryCheckpoints() || !cacheRequestActive_ ||
       historyCheckpointEntries_ == 0) {
     return;
   }
@@ -1807,6 +1875,8 @@ PrefillPlan MtmdLlmContext::preparePrefill(
 
   throwIfOverflows(plan.totalPositions(), plan.totalKvTokens());
 
+  spec_.setPromptEnd(current_.pos + plan.totalPositions());
+
   // mtmd::input_chunks has a user-declared destructor and therefore no
   // move assignment; transfer the owning pointer directly.
   stagedChunks_.ptr = std::move(chunks.ptr);
@@ -1853,9 +1923,13 @@ llama_pos MtmdLlmContext::evalMediaSegment(size_t mediaIndex, llama_pos pos) {
           seqId_,
           params_.n_batch,
           &newPos,
-          /*callback=*/nullptr,
-          /*user_data=*/nullptr);
+          modelCtx_.speculative != nullptr ? speculativePostDecode : nullptr,
+          modelCtx_.speculative);
     }
+  } else if (
+      modelCtx_.speculative != nullptr &&
+      mtmd_input_chunk_get_type(chunk) == MTMD_INPUT_CHUNK_TYPE_AUDIO) {
+    res = evalAudioChunkSpeculative(chunk, pos, seqId_, &newPos);
   } else {
     res = mtmd_helper_eval_chunk_single(
         visionContext(),
@@ -1894,6 +1968,10 @@ void MtmdLlmContext::onPrefillComplete(
   // already accounted by evalMediaSegment.
   advanceTextSpan(currentPos);
   prefillComplete_ = true;
+  // See TextLlmContext::onPrefillComplete.
+  spec_.reset();
+  spec_.resetStats();
+  spec_.begin({});
   if (cacheRequestActive_) {
     residentLedger_ = pendingPromptLedger_;
     rebuildSamplerFromLedger(residentLedger_);
@@ -1908,6 +1986,258 @@ void MtmdLlmContext::onPrefillComplete(
   if (thinkingForcedOpen_ && reasoningEnabled_) {
     reasoningState_.inside_reasoning = true;
   }
+}
+
+int32_t MtmdLlmContext::evalAudioChunkSpeculative(
+    const mtmd_input_chunk* chunk, llama_pos nPast, llama_seq_id seqId,
+    llama_pos* newNPast) {
+  // mtmd_helper_eval_chunk_single's audio branch, with llama-server's
+  // post-decode hook so the speculative state sees the audio positions.
+  int32_t res = mtmd_encode_chunk(visionContext(), chunk);
+  if (res != 0) {
+    return res;
+  }
+  return mtmd_helper_decode_image_chunk(
+      visionContext(),
+      modelCtx_.lctx,
+      chunk,
+      mtmd_get_output_embd(visionContext()),
+      nPast,
+      seqId,
+      params_.n_batch,
+      newNPast,
+      speculativePostDecode,
+      modelCtx_.speculative);
+}
+
+void MtmdLlmContext::processSpeculativeBatch(const llama_batch& batch) {
+  if (modelCtx_.speculative != nullptr &&
+      !modelCtx_.speculative->process(batch)) {
+    throw qvac_errors::StatusError(
+        ADDON_ID,
+        toString(FailedToDecode),
+        "[MtmdLlm] failed to process speculative batch\n");
+  }
+}
+
+void MtmdLlmContext::advanceDecodedTextToken(llama_token token) {
+  ++current_.pos;
+  ++current_.cacheTokens;
+  appendResidentToken(token);
+  ++lastGeneratedTokenCount_;
+}
+
+void MtmdLlmContext::generateSpeculative(
+    const std::function<void(const std::string&)>& outputCallback,
+    int& nRemain) {
+  using qvac_lib_inference_addon_llama::speculative::SpeculativeSequence;
+  const auto& runtime = *spec_.runtime();
+  LlamaBatch batch(std::max(1, runtime.nDraftMax() + 1), 0, 1);
+  unsigned generated = 0;
+  const auto decodeOrThrow = [&]() {
+    if (llama_decode(modelCtx_.lctx, *batch) != 0) {
+      throw qvac_errors::StatusError(
+          ADDON_ID,
+          toString(FailedToDecode),
+          "[MtmdLlm] failed to decode next token\n");
+    }
+    processSpeculativeBatch(*batch);
+  };
+  // Accepted tokens are checked for a full context like every sample
+  // (`sampleFromLogits` checks before sampling).
+  const auto emit = [&](llama_token token,
+                        size_t unemittedTail) -> SequenceStepResult {
+    if (contextWindowFull(current_.pos, ctxCeiling()) ||
+        contextWindowFull(current_.cacheTokens, ctxCeiling())) {
+      return {
+          .finished = true,
+          .contextOverflow = true,
+          .stopReason = GenerationStopReason::ContextOverflow};
+    }
+    --nRemain;
+    return emitSampledToken(
+        token, ++generated, outputCallback, &batch, unemittedTail);
+  };
+  const auto finish = [this](const SequenceStepResult& step) {
+    generationStopReason_ = step.contextOverflow
+                                ? GenerationStopReason::ContextOverflow
+                                : step.stopReason;
+  };
+
+  // The first token comes from the prompt logits, as in the plain loop.
+  if (nRemain == 0) {
+    return;
+  }
+  --nRemain;
+  SequenceStepResult step =
+      sampleFromLogits(-1, ++generated, outputCallback, &batch);
+  if (step.contextOverflow || step.finished) {
+    finish(step);
+    return;
+  }
+  llama_token sampled = step.token;
+
+  while (true) {
+    if (stopGeneration_.load()) {
+      ++lastGeneratedTokenCount_;
+      return;
+    }
+    if (nRemain == 0) {
+      // The plain loop decodes the token it stops on for the budget.
+      common_batch_clear(*batch);
+      common_batch_add(*batch, sampled, current_.pos, {seqId_}, false);
+      decodeOrThrow();
+      advanceDecodedTextToken(sampled);
+      return;
+    }
+
+    const llama_pos nTokens = std::max(current_.pos, current_.cacheTokens);
+    const int nDraftMax = SpeculativeSequence::maxDraft(
+        ctxCeiling(), nTokens, params_.n_predict > 0 ? nRemain : -1);
+    if (spec_.prepareDraft(nDraftMax, current_.pos, sampled, {})) {
+      SpeculativeSequence::draftPrepared(runtime);
+      spec_.afterDraft();
+    }
+
+    common_batch_clear(*batch);
+    const bool verifying = spec_.hasDraft();
+    if (verifying) {
+      spec_.addToBatch(*batch, sampled, current_.pos);
+    } else {
+      common_batch_add(*batch, sampled, current_.pos, {seqId_}, true);
+    }
+    decodeOrThrow();
+
+    if (!verifying) {
+      advanceDecodedTextToken(sampled);
+      --nRemain;
+      step = sampleFromLogits(-1, ++generated, outputCallback, &batch);
+      if (step.contextOverflow || step.finished) {
+        finish(step);
+        return;
+      }
+      sampled = step.token;
+      continue;
+    }
+
+    const auto verified = spec_.verify(smpl_.get(), current_.pos);
+    if (verified.replay) {
+      continue;
+    }
+
+    advanceDecodedTextToken(sampled);
+    const auto& ids = verified.ids;
+    // See TextLlmContext::generateSpeculative.
+    const auto dropUnstreamed = [&](size_t from) {
+      if (from + 1 < ids.size() &&
+          !llama_memory_seq_rm(
+              llama_get_memory(modelCtx_.lctx), seqId_, current_.pos, -1)) {
+        for (size_t j = from; j + 1 < ids.size(); ++j) {
+          ++current_.pos;
+          ++current_.cacheTokens;
+          appendResidentToken(ids[j]);
+        }
+      }
+    };
+    for (size_t i = 0; i < ids.size(); ++i) {
+      const bool isLast = i + 1 == ids.size();
+      if (stopGeneration_.load()) {
+        // See TextLlmContext::generateSpeculative.
+        dropUnstreamed(i);
+        return;
+      }
+      step = emit(ids[i], ids.size() - 1 - i);
+      if (step.contextOverflow || step.finished) {
+        dropUnstreamed(i);
+        finish(step);
+        return;
+      }
+      if (isLast) {
+        sampled = ids[i];
+      } else {
+        advanceDecodedTextToken(ids[i]);
+      }
+    }
+  }
+}
+
+bool MtmdLlmContext::prepareSpeculativeDraft(
+    llama_pos pos, llama_token sampled, unsigned generatedTokens) {
+  using qvac_lib_inference_addon_llama::speculative::SpeculativeSequence;
+  syncPosition(pos);
+  const int32_t nRemaining =
+      params_.n_predict > 0
+          ? params_.n_predict - static_cast<int32_t>(generatedTokens)
+          : -1;
+  return spec_.prepareDraft(
+      SpeculativeSequence::maxDraft(
+          ctxCeiling(),
+          std::max(current_.pos, current_.cacheTokens),
+          nRemaining),
+      current_.pos,
+      sampled,
+      {});
+}
+
+DraftStepResult MtmdLlmContext::onDraftLogitsReady(
+    int firstLogitIdx, llama_pos posBefore, unsigned generatedBefore,
+    const std::function<void(const std::string&)>& outputCallback) {
+  DraftStepResult out;
+  advanceTextSpan(posBefore);
+  spec_.setBatchStart(firstLogitIdx);
+  const auto verified = spec_.verify(smpl_.get(), posBefore);
+  if (verified.replay) {
+    advanceTextSpan(verified.keepTokens);
+    out.replay = true;
+    out.newPos = current_.pos;
+    return out;
+  }
+  // The sampled token is decoded now; record it.
+  syncPosition(posBefore + 1);
+  const auto& ids = verified.ids;
+  for (size_t i = 0; i < ids.size(); ++i) {
+    const bool isLast = i + 1 == ids.size();
+    SequenceStepResult step;
+    if (contextWindowFull(current_.pos, ctxCeiling()) ||
+        contextWindowFull(current_.cacheTokens, ctxCeiling())) {
+      step = {
+          .finished = true,
+          .contextOverflow = true,
+          .stopReason = GenerationStopReason::ContextOverflow};
+      generationStopReason_ = GenerationStopReason::ContextOverflow;
+    } else {
+      step = emitSampledToken(
+          ids[i],
+          generatedBefore + static_cast<unsigned>(i) + 1,
+          outputCallback,
+          nullptr,
+          ids.size() - 1 - i);
+      out.tokens.push_back(ids[i]);
+    }
+    if (step.finished) {
+      // See TextLlmContext::generateSpeculative.
+      if (!isLast &&
+          !llama_memory_seq_rm(
+              llama_get_memory(modelCtx_.lctx), seqId_, current_.pos, -1)) {
+        for (size_t j = i; j + 1 < ids.size(); ++j) {
+          appendResidentToken(ids[j]);
+          advanceTextSpan(current_.pos + 1);
+        }
+      }
+      out.finished = true;
+      out.contextOverflow = step.contextOverflow;
+      out.stopReason = step.stopReason;
+      break;
+    }
+    if (isLast) {
+      holdPendingResidentToken(ids[i], current_.pos);
+    } else {
+      appendResidentToken(ids[i]);
+      advanceTextSpan(current_.pos + 1);
+    }
+  }
+  out.newPos = current_.pos;
+  return out;
 }
 
 SequenceStepResult MtmdLlmContext::onLogitsReady(
@@ -1958,7 +2288,14 @@ SequenceStepResult MtmdLlmContext::sampleFromLogits(
   const llama_token tokenId =
       common_sampler_sample(smpl_.get(), modelCtx_.lctx, logitIdx);
   common_sampler_accept(smpl_.get(), tokenId, true);
+  return emitSampledToken(
+      tokenId, generatedAfterAccept, outputCallback, inlineDecodeBatch);
+}
 
+SequenceStepResult MtmdLlmContext::emitSampledToken(
+    llama_token tokenId, unsigned generatedAfterAccept,
+    const std::function<void(const std::string&)>& outputCallback,
+    LlamaBatch* inlineDecodeBatch, size_t unemittedTail) {
   std::string tokenStr =
       common_token_to_piece(modelCtx_.lctx, tokenId, params_.special);
   const std::string completeChars = utf8Buffer_.addToken(tokenStr);
@@ -2003,7 +2340,7 @@ SequenceStepResult MtmdLlmContext::sampleFromLogits(
     stopReason = GenerationStopReason::Eos;
   } else if (reachedBudget) {
     stopReason = GenerationStopReason::PredictionLimit;
-  } else if (checkAntiprompt()) {
+  } else if (checkAntiprompt(unemittedTail, tokenId)) {
     stopReason = GenerationStopReason::Antiprompt;
   }
   const bool finished = stopReason != GenerationStopReason::None;
@@ -2182,7 +2519,8 @@ std::vector<llama_token> MtmdLlmContext::residentStateTokens() const {
   return cacheStateTokens();
 }
 
-bool MtmdLlmContext::loadCache(const std::string& cacheKey) {
+bool MtmdLlmContext::loadCache(
+    const std::string& cacheKey, bool adoptFileCheckpoints) {
   if (cacheKey.empty() || !isFileInitialized(cacheKey)) {
     return false;
   }
@@ -2205,6 +2543,8 @@ bool MtmdLlmContext::loadCache(const std::string& cacheKey) {
         toString(UnableToLoadSessionFile),
         "MtmdLlmContext::loadCache: failed to load cache '" + cacheKey + "'");
   }
+  // Cache files hold the target state only, like llama-server's slot files.
+  speculative::resetDraftSequence(modelCtx_.lctx, seqId_);
 
   // `llama_state_seq_load_file` has already restored this sequence's KV cells.
   // Every validation below runs after that restore, and the scheduler installs
@@ -2231,6 +2571,9 @@ bool MtmdLlmContext::loadCache(const std::string& cacheKey) {
   }
   acceptRestoredState(stateTokens, cacheKey);
   restoredKvGuard.dismiss();
+  if (adoptFileCheckpoints) {
+    adoptCheckpointsFromCacheFile(cacheKey, loadedBytes);
+  }
   return true;
 }
 
@@ -2255,7 +2598,24 @@ void MtmdLlmContext::saveCache(const std::string& cacheKey) const {
         toString(UnableToSaveSessionFile),
         "MtmdLlmContext::saveCache: failed to save cache '" + cacheKey + "'");
   }
+  appendCheckpointsToCacheFile(tmpCacheKey);
   CacheManager::atomicPromoteFile(tmpCacheKey, cacheKey);
+}
+
+// Whatever checkpoints the context keeps: none on a model that takes none,
+// so its file is unchanged.
+void MtmdLlmContext::appendCheckpointsToCacheFile(
+    const std::string& path) const {
+  (void)cache::appendCheckpointSection(path, cacheCheckpoints_);
+}
+
+// Through `adoptCheckpoints`, so the file's checkpoint is kept exactly when
+// the context would keep one it captured itself.
+void MtmdLlmContext::adoptCheckpointsFromCacheFile(
+    const std::string& path, uint64_t offset) {
+  adoptCheckpoints(
+      cache::readCheckpointSection(
+          path, offset, residentLedger_, cacheCheckpointPolicy_));
 }
 
 void MtmdLlmContext::snapshotPreRequestCursor() {

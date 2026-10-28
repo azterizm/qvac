@@ -12,9 +12,11 @@ add_executable(
   test_cancel_stale_flag.cpp
   test_bert_model.cpp
   test_laya_model.cpp
+  test_rerank_model.cpp
   test_llama_lazy_init_backend.cpp
   test_logging.cpp
   test_model_metadata.cpp
+  test_multimodal_options.cpp
   test_utils.cpp
   backend_env.cpp
   ${CMAKE_SOURCE_DIR}/addon/src/model-interface/AsyncWeightsLoader.cpp
@@ -22,8 +24,12 @@ add_executable(
   ${CMAKE_SOURCE_DIR}/addon/src/model-interface/BertModel.cpp
   ${CMAKE_SOURCE_DIR}/addon/src/model-interface/LlamaModelLoader.cpp
   ${CMAKE_SOURCE_DIR}/addon/src/model-interface/LayaModel.cpp
+  ${CMAKE_SOURCE_DIR}/addon/src/model-interface/RerankModel.cpp
   ${CMAKE_SOURCE_DIR}/addon/src/model-interface/LlamaLazyInitializeBackend.cpp
   ${CMAKE_SOURCE_DIR}/addon/src/model-interface/ModelMetadata.cpp
+  ${CMAKE_SOURCE_DIR}/addon/src/model-interface/MultimodalEmbedder.cpp
+  ${CMAKE_SOURCE_DIR}/addon/src/model-interface/ImagePixelLimit.cpp
+  ${CMAKE_SOURCE_DIR}/addon/src/model-interface/AudioLengthLimit.cpp
   ${CMAKE_SOURCE_DIR}/addon/src/model-interface/logging.cpp
   ${CMAKE_SOURCE_DIR}/addon/src/model-interface/utils.cpp
 )
@@ -84,7 +90,7 @@ qvac_addon_stage_fabric_for_test(addon-test ${qvac_fabric_target})
 
 # AddressSanitizer on the test executable, kept in a deliberately LIMITED form.
 # addon-test dynamically links the shared @qvac/fabric runtime
-# (qvac__fabric@0.bare), and the shipped fabric prebuild is not
+# (qvac__fabric-<host>@0.bare), and the shipped fabric prebuild is not
 # ASan-instrumented. See packages/classification-ggml/test/unit/CMakeLists.txt
 # for the full rationale. scripts/run-cpp-tests.js sets ASAN_OPTIONS for local/CI
 # runs: alloc_dealloc_mismatch=0:detect_leaks=0:abort_on_error=1.

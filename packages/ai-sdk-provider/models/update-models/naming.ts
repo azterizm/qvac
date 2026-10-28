@@ -423,8 +423,14 @@ function generateParakeetName({ filename, lowerPath, quantization }: BaseNameInp
   const lower = filename.toLowerCase()
   const family = isIndicConformer(filename, lowerPath) ? 'INDIC_CONFORMER' : ''
 
+  if (lower.includes('nemotron-3-diarization') && lower.endsWith('.gguf')) {
+    return `PARAKEET_NEMOTRON_3_DIARIZATION_${cleanPart(quantization)}`
+  }
+
   let variant = ''
-  if (lower.includes('sortformer') || lower.includes('diar_streaming')) {
+  if (lower.includes('transcribepsy') || lowerPath.includes('transcribepsy')) {
+    variant = 'TRANSCRIBEPSY'
+  } else if (lower.includes('sortformer') || lower.includes('diar_streaming')) {
     variant = 'SORTFORMER'
   } else if (lower.includes('nemotron') || lowerPath.includes('nemotron')) {
     variant = 'NEMOTRON'
@@ -445,10 +451,17 @@ function generateParakeetName({ filename, lowerPath, quantization }: BaseNameInp
     const paramsHint = paramsMatch ? paramsMatch[1]! : ''
     const versionHint = versionMatch ? `V${versionMatch[1]!}` : ''
     const speakerHint = speakerMatch ? speakerMatch[1]! : ''
+    const coremlHint = lower.includes('coreml') ? 'COREML' : ''
 
-    const nameParts = [family, variant, paramsHint, speakerHint, versionHint, quantization].filter(
-      (p) => p && p !== ''
-    )
+    const nameParts = [
+      family,
+      variant,
+      paramsHint,
+      speakerHint,
+      versionHint,
+      coremlHint,
+      quantization
+    ].filter((p) => p && p !== '')
     return `PARAKEET_${nameParts.map(cleanPart).join('_')}`
   }
 

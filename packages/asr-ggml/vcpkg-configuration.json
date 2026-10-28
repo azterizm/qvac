@@ -1,8 +1,9 @@
 {
   "default-registry": {
     "kind": "git",
-    "baseline": "dca20a940d85d6741285c888b53bd10da29c0723",
-    "repository": "https://github.com/tetherto/qvac-registry-vcpkg.git"
+    "baseline": "e31be272ecdf9f20970302ebf8a2943d47803001",
+    "repository": "https://github.com/tetherto/qvac-registry-vcpkg.git",
+    "reference": "32d21b708d250ab06a3fc41345dcb7c2bac09834"
   },
   "registries": [
     {
@@ -15,7 +16,9 @@
         "vulkan-headers",
         "vulkan-loader",
         "spirv-headers",
-        "zlib"
+        "zlib",
+        "antlr4",
+        "libuuid"
       ]
     }
   ]

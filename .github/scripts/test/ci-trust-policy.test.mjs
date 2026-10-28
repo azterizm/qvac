@@ -949,18 +949,19 @@ function rpcServerProject() {
   return JSON.parse(read("packages/ggml-rpc-server/project.json"));
 }
 
-// The RPC server smoke test loads Fabric's RPC backend, which needs the
-// libibverbs runtime on the GitHub-hosted linux-arm64 leg. The PR path builds
-// through prebuilds-nx from build.options.ci; the release path still calls
+// Fabric's RPC backend loads libibverbs at runtime, so the RPC server smoke test
+// must not install it: the GitHub-hosted linux-arm64 leg then checks that the
+// server starts over TCP without it. The PR path builds through prebuilds-nx
+// from build.options.ci; the release path still calls
 // prebuilds-ggml-rpc-server.yml.
-test("RPC server prebuilds install the Linux RDMA runtime dependency", () => {
+test("RPC server prebuilds smoke-test without the Linux RDMA runtime", () => {
   const prebuilds = read(".github/workflows/prebuilds-ggml-rpc-server.yml");
   const build = rpcServerProject().targets.build.options.ci;
 
   assert.match(prebuilds, /desktop-smoke-command:/);
-  assert.match(prebuilds, /^\s+linux-extra-packages:\s*libibverbs1$/m);
+  assert.doesNotMatch(prebuilds, /^\s+linux-extra-packages:.*libibverbs/m);
   assert.equal(build.desktopSmokeCommand, "node scripts/smoke-packaged.cjs");
-  assert.equal(build.linuxExtraPackages, "libibverbs1");
+  assert.equal(build.linuxExtraPackages, undefined);
 });
 
 // ci-router turns both routes on for a manual dispatch, so a dispatched run
@@ -1825,6 +1826,22 @@ test('ggml-rpc-server keeps Device Farm runs on demand', () => {
   )
 });
 
+test('ggml-rpc-server validates the same devices it schedules', () => {
+  const path = '.github/workflows/integration-mobile-test-ggml-rpc-server.yml'
+  const source = read(path)
+  // Validation must approve exactly the devices the scheduler bills.
+  const devices =
+    "inputs.devices_custom != '' && inputs.devices_custom || (inputs.platform == 'Android' && inputs.android_device || inputs.ios_device)"
+  const validate = source.match(/^\s+devices: \$\{\{ (.+) \}\}$/m)
+  const schedule = source.match(/^\s+device-models: \$\{\{ (.+) \}\}$/m)
+  assert.equal(validate?.[1], devices, `${path}: validate-devices must resolve devices_custom over the dropdown`)
+  assert.equal(
+    schedule?.[1],
+    `inputs.platform != '' && (${devices}) || ''`,
+    `${path}: the scheduler must bill the same devices validation approved`,
+  )
+});
+
 test('ggml-rpc-server prebuild callers grant reusable workflow permissions', () => {
   for (const [path, jobName] of [
     ['.github/workflows/on-merge-ggml-rpc-server.yml', 'build'],
@@ -2585,14 +2602,9 @@ test("iOS mobile runs collect on-device crash reports", () => {
     "node node_modules/@wdio/cli/bin/wdio.js",
   );
   const crashPull = generateTestspec.lastIndexOf("pymobiledevice3 crash pull");
-  const androidLogcat = generateTestspec.indexOf("adb logcat -d -b all");
   // Anchor on the emitted YAML key, not the word — prose above mentions it too.
   const postTestPhase = generateTestspec.indexOf("  post_test:\n    commands:");
   assert.ok(crashPull > 0, "iOS crash-report pull must exist");
-  assert.ok(
-    androidLogcat > 0,
-    "Android logcat collection must stay in post_test",
-  );
   assert.ok(
     crashPull < postTestPhase,
     "crash pull must be emitted in the test phase — post_test never runs on a failed test",
@@ -2603,21 +2615,21 @@ test("iOS mobile runs collect on-device crash reports", () => {
   const rcCapture = generateTestspec.indexOf("WDIO_RC=$?");
   assert.ok(
     rcCapture > wdioCall,
-    "wdio exit code must be captured right after the run",
+    "iOS wdio exit code must be captured right after the run",
   );
   assert.ok(
     exitLine > crashPull,
-    "the wrapper must re-exit after collecting logs",
+    "the iOS wrapper must re-exit after collecting the crash report",
   );
   assert.match(
     generateTestspec.slice(0, wdioCall),
     /if \[ "\$PLATFORM" = "iOS" \]/,
-    "wrapper must be iOS-only",
+    "the iOS wrapper must sit inside the iOS platform branch",
   );
   assert.doesNotMatch(
     generateTestspec.slice(wdioCall, exitLine),
     /^\s+set -e$/m,
-    "set -e must not be re-enabled around log collection",
+    "set -e must not be re-enabled around iOS log collection",
   );
 
   assert.match(generateTestspec, /\[CRASH_REPORT_START\]/);
@@ -2666,6 +2678,51 @@ test("iOS mobile runs collect on-device crash reports", () => {
   // ...and they have to reach the uploaded artifact.
   assert.match(collectLogs, /-type d -name "crash-reports"/);
   assert.match(collectLogs, /Extracted iOS crash report/);
+});
+
+test("Android mobile runs collect the device logcat without rewriting the verdict", () => {
+  const generateTestspec = read(
+    ".github/actions/run-mobile-integration-tests/upload-to-devicefarm/generate-testspec.sh",
+  );
+
+  const postTestPhase = generateTestspec.indexOf("  post_test:\n    commands:");
+  // The Android block follows the iOS one, so anchor on the last wdio call and
+  // chain forward; indexOf would resolve every anchor into the iOS wrapper.
+  const wdioCall = generateTestspec.lastIndexOf(
+    "node node_modules/@wdio/cli/bin/wdio.js",
+  );
+  assert.ok(wdioCall > 0, "Android wdio invocation must exist");
+
+  const rcCapture = generateTestspec.indexOf("WDIO_RC=$?", wdioCall);
+  const logcat = generateTestspec.indexOf("adb logcat -d -b all", rcCapture);
+  const exitLine = generateTestspec.indexOf("exit $WDIO_RC", logcat);
+
+  assert.ok(
+    rcCapture > wdioCall,
+    "Android wdio exit code must be captured right after the run",
+  );
+  assert.ok(
+    logcat > rcCapture,
+    "the logcat dump must run after the exit code is captured",
+  );
+  assert.ok(
+    exitLine > logcat,
+    "the Android wrapper must re-exit with wdio's code after the dump — without it the block ends on `adb … || true` and a failing shard reports a pass",
+  );
+  assert.ok(
+    exitLine < postTestPhase,
+    "the whole Android wrapper must sit in the test phase — post_test never runs on a failed test",
+  );
+  assert.doesNotMatch(
+    generateTestspec.slice(wdioCall, exitLine),
+    /^\s+set -e$/m,
+    "set -e must not be re-enabled around Android log collection",
+  );
+  assert.strictEqual(
+    generateTestspec.indexOf("adb logcat -d", postTestPhase),
+    -1,
+    "no adb logcat may be left in post_test — it never runs on a failed shard",
+  );
 });
 
 test("tts-ggml functional mobile workflow opts into dual flagship per shard", () => {
@@ -2863,7 +2920,13 @@ test("asr-ggml functional mobile workflow opts into dual flagship per engine sha
 // tag via create-release-tag.yml, keeping the Releases page SDK-focused. Adding
 // a caller here is a deliberate policy decision, not a drive-by edit.
 const GITHUB_RELEASE_REUSABLE = "./.github/workflows/create-github-release.yml";
-const ALLOWED_RELEASE_CALLERS = [".github/workflows/publish-sdk.yml"];
+// release-train.yml cuts the same sdk-v<version> release. It takes the package
+// from .github/release-trains.json, so release-train.test.mjs holds that
+// catalog to @qvac/sdk.
+const ALLOWED_RELEASE_CALLERS = [
+  ".github/workflows/publish-sdk.yml",
+  ".github/workflows/release-train.yml",
+];
 
 test("release policy: only the SDK workflow calls create-github-release.yml", () => {
   const callers = [
@@ -2899,6 +2962,26 @@ test("release policy: no workflow cuts a GitHub Release outside the SDK surface"
     }
     if (/gh release create\b/.test(code)) {
       offenders.push(`${path}: calls 'gh release create'`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
+
+// Unfiltered, nx's publish also publishes every workspace package a train
+// depends on, through `^nx-release-publish`. .github/scripts/release-train.mjs
+// is the one caller, and it names the train's packages.
+test("release policy: no workflow or action calls nx's publish directly", () => {
+  const actionFiles = filesUnder(join(root, ".github/actions"))
+    .filter((path) => /\/action\.ya?ml$/.test(path))
+    .map((path) => path.slice(root.length + 1));
+  const offenders = [];
+  for (const path of [...workflowPaths(), ...actionFiles]) {
+    const code = withoutComments(read(path));
+    if (/nx-release-publish/.test(code)) {
+      offenders.push(`${path}: runs the nx-release-publish target`);
+    }
+    if (/\bnx\s+release\b(?!\s+(?:version|plan|changelog)\b)/.test(code)) {
+      offenders.push(`${path}: calls 'nx release' other than version, plan or changelog`);
     }
   }
   assert.deepEqual(offenders, []);
@@ -2978,7 +3061,7 @@ function eachCppTestsCacheStep(opts = {}) {
   const found = [];
   const patterns = [opts.match].flat();
   for (const path of workflowPaths()) {
-    if (!/\/cpp-tests?-/.test(path)) continue;
+    if (!/\/(reusable-)?cpp-tests?-/.test(path)) continue;
     if (!opts.includeExempt && TRUSTED_CACHE_EXEMPT.has(path)) continue;
     const code = withoutComments(read(path));
     const steps = code.split(/\n {6}- /);
@@ -3171,3 +3254,34 @@ test("cache policy: the toolchain fingerprint identifies vcpkg by version, not b
 
   assert.deepEqual(offenders, []);
 });
+
+for (const [workflow, nextStep] of [
+  ["integration-test-classification-ggml.yml", "Check production package excludes test models"],
+  ["integration-mobile-test-classification-ggml.yml", "Copy mobile test assets (weights + images)"],
+]) {
+  test(`${workflow}: staging credentials are cleared before PR-head test code`, () => {
+    const path = `.github/workflows/${workflow}`;
+    const source = read(path);
+    const steps = source.split(/\n {6}- /);
+    const verification = steps.findIndex((step) => step.startsWith("name: Verify MegaLoc test models"));
+    const cleanup = steps.findIndex((step) => step.startsWith("name: Drop staging AWS credentials"));
+    const consumer = steps.findIndex((step) => step.startsWith(`name: ${nextStep}`));
+    assert.ok(verification >= 0 && verification < cleanup && cleanup < consumer);
+    assert.match(steps[cleanup], /if: always\(\) && hashFiles/);
+    const script = extractRunBlock(path, "Drop staging AWS credentials");
+    const values = runScript('GITHUB_ENV="$GITHUB_OUTPUT"\n' + script, {
+      AWS_ACCESS_KEY_ID: "fixture-access-key",
+      AWS_SECRET_ACCESS_KEY: "fixture-secret-key",
+      AWS_SESSION_TOKEN: "fixture-session-token",
+    });
+    assert.deepEqual(values, {
+      AWS_ACCESS_KEY_ID: "",
+      AWS_SECRET_ACCESS_KEY: "",
+      AWS_SESSION_TOKEN: "",
+    });
+    if (workflow.includes("mobile")) {
+      assert.match(source, /name: Upload to Device Farm[\s\S]*?aws-role-to-assume: \$\{\{ secrets.AWS_OIDC_ROLE_ARN \}\}/);
+      assert.match(read(".github/actions/run-mobile-integration-tests/upload-to-devicefarm/action.yml"), /uses: aws-actions\/configure-aws-credentials@[a-f0-9]{40}/);
+    }
+  });
+}

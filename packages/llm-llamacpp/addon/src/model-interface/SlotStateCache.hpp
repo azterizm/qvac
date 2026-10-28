@@ -15,8 +15,10 @@
 #include <inference-addon-cpp/Errors.hpp>
 #include <llama.h>
 
+#include "CacheCheckpointFile.hpp"
 #include "CacheLedger.hpp"
 #include "CacheManager.hpp"
+#include "SpeculativeRuntime.hpp"
 #include "addon/LlmErrors.hpp"
 #include "inference-addon-cpp/Logger.hpp"
 #include "utils/LoggingMacros.hpp"
@@ -31,6 +33,9 @@ struct SlotStateCacheEntry {
   /// `llama_state_seq_save_file` writes after its header.
   std::vector<uint8_t> state;
   std::vector<llama_token> ledgerWords;
+  /// The speculative draft side of the state, kept with it like
+  /// llama-server's prompt cache keeps the draft context's state.
+  speculative::DraftSequenceState draft;
   cache::Checkpoints checkpoints;
   /// Has turns its `cacheKey` file does not hold yet.
   bool dirty = false;
@@ -41,12 +46,13 @@ struct SlotStateCacheEntry {
   bool ephemeral = false;
 
   [[nodiscard]] uint64_t bytes() const noexcept {
-    uint64_t total = state.size() + ledgerWords.size() * sizeof(llama_token);
+    uint64_t total =
+        state.size() + draft.bytes() + ledgerWords.size() * sizeof(llama_token);
     for (const cache::Checkpoint& checkpoint : checkpoints) {
-      // Disk-stored checkpoints hold a temp-file path, not RAM.
-      if (checkpoint.state.hasBuffer()) {
-        total += checkpoint.state.bytes();
-      }
+      // Disk-stored checkpoints hold a temp-file path, not RAM; their
+      // speculative draft side always stays in RAM.
+      total += checkpoint.state.hasBuffer() ? checkpoint.state.bytes()
+                                            : checkpoint.state.draft().bytes();
     }
     return total;
   }
@@ -164,9 +170,10 @@ public:
 
   /// Writes `entry` to `path` in the format `llama_state_seq_save_file`
   /// produces and every cache load reads: magic, version, ledger token
-  /// count, ledger tokens, then the sequence state. Through a temp file, like
-  /// every other cache write. Returns false (and leaves `path` untouched) on
-  /// failure.
+  /// count, ledger tokens, then the sequence state, followed by the entry's
+  /// newest checkpoint (`cache::appendCheckpointSection`). Through a temp file,
+  /// like every other cache write. Returns false (and leaves `path` untouched)
+  /// on failure.
   static bool writeStateFile(
       const std::string& path, const SlotStateCacheEntry& entry) noexcept {
     const std::string tmp = path + ".tmp";
@@ -204,6 +211,7 @@ public:
           throw std::runtime_error("short write");
         }
       }
+      (void)cache::appendCheckpointSection(tmp, entry.checkpoints);
       CacheManager::atomicPromoteFile(tmp, path);
       return true;
     } catch (...) {

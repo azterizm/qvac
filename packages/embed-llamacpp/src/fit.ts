@@ -1,10 +1,15 @@
-import { resolveBackendsDir } from './addon'
 
 export interface EmbedFitRequest {
   /** Absolute path to the GGUF, or to the registry's weightless copy. */
   modelPath: string
   /** The load, as `loadModel` takes it, resolved by the same code that load runs. */
   config?: Record<string, string>
+  /**
+   * The load's `files.projectionModel`, if any. The projection does not count
+   * a projector, so a multimodal load is refused with `unsupported-config`
+   * rather than projected as if it were text only.
+   */
+  projectionModel?: string
   /** Floor the fitter may not reduce the context below. */
   minCtxSize?: number
   /** Memory to leave free on every device, held to against the load's own `fit-target`. */
@@ -32,6 +37,12 @@ export interface EmbedFitDevice {
 export interface EmbedFitResult {
   status: EmbedFitStatus
   reason: EmbedFitReason
+  /**
+   * With `status: "error"`: what caused it, such as the config key that was
+   * refused or the parser's own message, so a caller can act on it. Absent
+   * otherwise.
+   */
+  message?: string
   /** The layer count the placement resolved to. */
   gpuLayers: number
   ctxSize: number
@@ -46,7 +57,7 @@ export interface EmbedFitResult {
 }
 
 interface FitBinding {
-  assessFit(request: EmbedFitRequest): EmbedFitResult
+  assessFit(request: EmbedFitRequest): Promise<EmbedFitResult>
 }
 
 /**
@@ -54,26 +65,20 @@ interface FitBinding {
  * and never weight data. The registry's weightless copy of a model answers the
  * same as the model itself, so this can run before anything is downloaded.
  *
- * A model the fitter cannot read comes back as `status: "error"`; only a broken
- * request throws.
+ * A model the fitter cannot read resolves to `status: "error"`; only a broken
+ * request rejects.
  *
- * Runs synchronously on the calling thread and builds the model twice without
- * allocating weights, so a caller that must stay responsive runs it off its
- * own loop.
+ * Builds the model twice without allocating weights. Concurrent calls run one
+ * at a time.
  *
  * The projection reads the model's vocabulary, and llama asserts on a
  * vocabulary it finds inconsistent. An assert aborts rather than throwing, so
  * a corrupt file ends the process instead of returning a status: take the
  * model from a source you trust, or call this behind a process boundary.
  */
-export function assessFit(request: EmbedFitRequest): EmbedFitResult {
+export async function assessFit(request: EmbedFitRequest): Promise<EmbedFitResult> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- native binding is resolved lazily from package prebuilds.
   const binding = require('./binding.js') as FitBinding
 
-  const config = { ...request.config }
-  if (config['backendsDir'] === undefined || config['backendsDir'] === '') {
-    config['backendsDir'] = resolveBackendsDir()
-  }
-
-  return binding.assessFit({ ...request, config })
+  return await binding.assessFit({ ...request, config: { ...request.config } })
 }

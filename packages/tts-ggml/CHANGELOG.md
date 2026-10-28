@@ -9,6 +9,164 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Project only required MOSS Delay text-control logits on Metal.
+- Avoid duplicate reference encoding when MOSS-TTSD dialogue uses one recording.
+- Align TTSD prompts and reference level normalization with the native pipeline.
+- The shared native `ggml-speech` moves to `2026-10-27` across the speech
+  addons, which also speeds up single-query Metal softmax on long KV caches
+  ([#5392](https://github.com/tetherto/qvac/pull/5392)).
+
+### Fixed
+
+- Adreno GPUs (Android, OpenCL): matrix products on every quantized weight
+  type whose sums exceed the fp16 range no longer come back as infinity;
+  `ggml-speech` `2026-10-23` fixed q8_0 only.
+- Metal: a fused SwiGLU mat-vec whose output overlaps its inputs, and copies
+  into strided destinations, no longer produce wrong values; quantized matrix
+  products keep F32 activations.
+- Vulkan: tensor views not aligned for the speech ops fall back instead of
+  returning wrong data.
+
+## [0.14.0] - 2026-10-23
+
+### Added
+
+- Core ML DAC sidecar for Parler-TTS on macOS and iOS: audio decoding runs
+  on Core ML when a `<gguf stem minus quant tag>-dac.mlmodelc` sits beside
+  the GGUF (`parler-mini-v1-q8_0.gguf` -> `parler-mini-v1-dac.mlmodelc`), and
+  falls back to ggml otherwise. `PARLER_COREML_DISABLE` keeps it on ggml
+  ([#5326](https://github.com/tetherto/qvac/pull/5326)).
+
+### Changed
+
+- Audio8 streaming methods emit PCM as codec windows finish, with cancellation
+  and no full-waveform replay.
+
+- Align the shared native `speech-cpp` source pin to `2026-10-20#1` across
+  the speech addons so they use the same source revision
+  ([#5245](https://github.com/tetherto/qvac/pull/5245)).
+- Move the shared native `speech-cpp` source pin to `2026-10-23#2` across
+  the speech addons so they use the same source revision
+  ([#5326](https://github.com/tetherto/qvac/pull/5326)).
+- Update the shared native `speech-cpp` source to `2026-10-19`, including
+  optional CosyVoice3 Core ML sidecars on Apple platforms
+  ([#5194](https://github.com/tetherto/qvac/pull/5194)). Re-export existing
+  LM sidecars to include the cache feedback fix for consecutive predictions.
+- Include native Pocket TTS Metal, CUDA, Vulkan and OpenCL support
+  ([#5191](https://github.com/tetherto/qvac/pull/5191)). The Pocket
+  JavaScript API continues to require CPU inference.
+- The JavaScript wrapper is split into modules under `lib/`: engine ids and
+  discovery, model-file normalization, per-engine configuration (`lib/engines/`),
+  option validation, native parameter building, per-call fields, reload and
+  sentence streaming ([#5174](https://github.com/tetherto/qvac/pull/5174)).
+  `index.js` keeps the public `TTSGgml` class and its execution lifecycle; the
+  public API, engine/file precedence, cancellation, exclusive execution and
+  reload behaviour are unchanged.
+- The wrapper's Pocket execution rules (completion barrier, cancellation drain,
+  abort handling, lifecycle lock, reload), native event routing, the
+  `exclusiveRun` response queue and the `getVoiceControls()` catalog mapping
+  move to `lib/pocketLifecycle.js`, `lib/addonEvents.js`,
+  `lib/exclusiveQueue.js` and `lib/voiceControls.js`
+  ([#5211](https://github.com/tetherto/qvac/pull/5211)); `index.js` keeps the
+  public API and the load / run / cancel / reload lifecycle. No behaviour
+  change.
+- `normalizeGgmlFiles` in `lib/modelFiles.js` is table-driven: one row per
+  canonical model-file key lists its aliases in precedence order, so adding an
+  alias is a one-line table change
+  ([#5210](https://github.com/tetherto/qvac/pull/5210)). Alias precedence, the
+  skipping of empty values and the normalized key set are unchanged.
+
+### Fixed
+
+- LavaSR denoising can use the Vulkan GPU on supported Android ARM Mali devices
+  when GPU inference is enabled, instead of falling back to CPU
+  ([#5062](https://github.com/tetherto/qvac/pull/5062)).
+- Adreno GPUs (Android, OpenCL): q8_0 matrix products whose sums exceed
+  the fp16 range no longer come back as infinity, and attention over 32 or
+  more tokens with unpadded lengths is computed correctly. The shared native
+  `ggml-speech` moves to `2026-10-23` across the speech addons
+  ([#5326](https://github.com/tetherto/qvac/pull/5326)).
+- Parler-TTS reports an error instead of crashing when the model produces
+  non-finite logits ([#5326](https://github.com/tetherto/qvac/pull/5326)).
+
+## [0.13.0] - 2026-10-14
+
+### Breaking
+
+- `assessFit` returns a Promise; the synchronous binding is removed
+  ([#5010](https://github.com/tetherto/qvac/pull/5010)). The fit runs on a worker thread so the JavaScript loop keeps
+  running, and concurrent calls run one at a time within the addon. A model
+  the fitter cannot read still resolves with `status: 'error'`; a malformed
+  request rejects instead of throwing. Change
+  `const fit = TTSGgml.assessFit(request)` to `const fit = await TTSGgml.assessFit(request)`.
+
+### Changed
+
+- `@qvac/infer-base` dependency raised `^0.6.2` -> `^0.8.0`
+  ([#5074](https://github.com/tetherto/qvac/pull/5074)). `^0.6.2` never took 0.7.0 or 0.8.0; 0.8.0 adds an
+  optional `retainOutput: false` on `QvacResponse` and
+  `createJobHandler().start()` for consuming output events through
+  `onUpdate()` without keeping every chunk in memory ([#5028](https://github.com/tetherto/qvac/pull/5028)).
+  Retention stays enabled by default and this package does not pass the option, so there is no API or
+  runtime behaviour change for this package.
+- `speech-cpp` is pinned to `2026-10-12` port-version 1, the registry
+  revision that ships the merged MOSS CUDA/Vulkan backend source, the same
+  pin as the other speech addons ([#5001](https://github.com/tetherto/qvac/pull/5001)).
+- The registry baseline moves to `e31be272ecdf9f20970302ebf8a2943d47803001`
+  so the pinned `speech-cpp` resolves the merged OpenMOSS source, and the
+  MOSS README documents the strict desktop CUDA/Vulkan validation suites
+  ([#5004](https://github.com/tetherto/qvac/pull/5004), [#5003](https://github.com/tetherto/qvac/pull/5003)).
+- The published package includes the MOSS backend and GPU validation test
+  helpers under `test/utils/` that those suites use ([#5003](https://github.com/tetherto/qvac/pull/5003)).
+
+### Fixed
+
+- The linux-x64 prebuild ships the CUDA backend again, next to Vulkan and
+  the CPU variants; releases 0.10.0 to 0.12.0 left it out. Where the NVIDIA
+  driver and the CUDA 13 runtime libraries (cudart, cuBLAS) resolve, GPU
+  requests run on CUDA instead of Vulkan; other hosts keep Vulkan or CPU
+  ([#4985](https://github.com/tetherto/qvac/pull/4985)).
+
+## [0.12.0] - 2026-10-14
+
+### Breaking
+
+- `binding.js` is now `module.exports = require('#host-addon')`, a specifier
+  the Bare module lexer can follow, so `bare-pack` bundles an app that
+  requires `@qvac/tts-ggml`. `#host-addon` maps each host to its platform
+  package alone, with no fallback.
+- The meta package is no longer an addon. Each platform package is an ordinary
+  one: its module is built as `qvac__tts-ggml-<suffix>` (every iOS host shares
+  `ios`) and sits at `prebuilds/<host>/qvac__tts-ggml-<suffix>.bare`, with its
+  ggml backends in `prebuilds/<host>/qvac__tts-ggml-<suffix>/`.
+- The addon finds its ggml backends itself, next to the loaded module. An
+  explicit `backendsDir` is now scanned as given rather than as a prebuilds
+  root under which `<host>/<module>` is appended. `resolveBackendsDir()` and
+  `lib/backends.js` are removed.
+- A source build is loadable once `npm run link:platform` (part of
+  `build:native`) stages it as the host's platform package in `node_modules/`.
+
+## [0.11.1] - 2026-10-13
+
+### Added
+
+- `package.json` records the `ggml-speech` build the prebuilds ship as
+  `qvac["ggml-speech"]`. The speech addons ship their ggml backends under the
+  same file names, so an app that bundles several of them needs releases that
+  record the same build.
+
+### Changed
+
+- `qvac-lib-inference-addon-cpp` dependency floor raised `1.4.0` -> `1.5.0`
+  ([#5030](https://github.com/tetherto/qvac/pull/5030)). The new library adds
+  `JsAsyncTask::run(env, work, marshal)`, which resolves a Promise with a value
+  marshalled on the JavaScript loop, and includes `<uv.h>` from headers that
+  use libuv types now that libjs no longer includes it from `<js.h>`.
+  Compile-time only; no API or runtime behaviour change for this package.
+- Update the shared `speech-cpp` pin to `2026-10-12` for CosyVoice3 CUDA LM flash
+  attention and decode graph reuse, plus Vulkan flow attention with f16 K/V.
+  Unsupported attention operations retain the regular-attention fallback.
+
 - Raise the `speech-cpp` floor to `2026-10-09`. On macOS and iOS, MOSS,
   MOSS-TTSD, MOSS-SoundEffect and MOSS-Speech run one stage each on a Core ML
   sidecar staged next to the GGUF (see the README's Core ML sidecars on
@@ -16,6 +174,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an ARM CPU are expanded to f32, which avoids a slow scalar path at twice the
   memory for those weights, and Audio8 with GPU offload on Adreno (OpenCL) no
   longer fails its strided key-cache copies.
+- Pin `ggml-speech` to `2026-10-07#1` and `speech-cpp` to `2026-10-09`, the
+  same versions as the other speech addons, instead of taking at least those
+  versions.
 
 ## [0.11.0] - 2026-10-09
 

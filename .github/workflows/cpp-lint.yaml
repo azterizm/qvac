@@ -15,6 +15,11 @@ on:
         description: >-
           PR head SHA to checkout. When empty, falls back to `github.sha`.
         type: string
+      use-merge-base:
+        description: "Compare formatting and changed sources from the common ancestor of sha and HEAD"
+        type: boolean
+        required: false
+        default: false
       workdir:
         default: "."
         type: string
@@ -116,6 +121,14 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
 
+      - name: Resolve common ancestor for C++ checks
+        if: inputs.use-merge-base
+        shell: bash
+        run: |
+          git merge-base "$BASE_SHA" HEAD > "$RUNNER_TEMP/cpp-lint-base"
+          read -r lint_base < "$RUNNER_TEMP/cpp-lint-base"
+          printf 'BASE_SHA=%s\n' "$lint_base" >> "$GITHUB_ENV"
+
       - name: Setup AWS + Windows CLI
         uses: tetherto/qvac/.github/actions/setup-aws-prebuild@2e2c94d66a50c8b8851824314e343ede5297eb1f
         with:
@@ -205,7 +218,7 @@ jobs:
       # if the artifact has no linux-x64/ instead of silently overlaying nothing.
       - if: ${{ inputs.fabric-overlay-artifact != '' }}
         name: Overlay PR @qvac/fabric prebuilds
-        uses: tetherto/qvac/.github/actions/overlay-local-fabric@6620d695d3a07cafe3931182e7844dde376a23f8
+        uses: tetherto/qvac/.github/actions/overlay-local-fabric@10b5b0b0a410a116d81e0f76c4c5027fecda1a64
         with:
           workdir: ${{ env.WORKDIR }}
           prebuilds-root: ${{ runner.temp }}/fabric-prebuilds

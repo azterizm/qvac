@@ -141,6 +141,17 @@ declare namespace LlmLlamacpp {
         backend?: string;
         gpu_layers?: NumericLike;
         ctx_size?: NumericLike;
+        /**
+         * Main GGML threadpool busy-wait level, from 0 (sleep while idle) to 100
+         * (maximum polling). Defaults to 0. Values above 0 can reduce worker wake
+         * latency for CPU-heavy workloads, but consume CPU while GPU work runs.
+         */
+        poll?: NumericLike;
+        /**
+         * Batch GGML threadpool busy-wait level. Defaults to `poll`, or 0 when
+         * neither option is set.
+         */
+        "poll-batch"?: NumericLike;
         system_prompt?: string;
         lora?: string;
         temp?: NumericLike;
@@ -244,6 +255,10 @@ declare namespace LlmLlamacpp {
         devices?: string;
         "cache-type-k"?: string;
         "cache-type-v"?: string;
+        /** Maximum reported image pixel count in megapixels before decoding. Default: 50. */
+        "image-max-megapixels"?: string;
+        /** Alias for image-max-megapixels. Set only one spelling. */
+        image_max_megapixels?: string;
         /**
          * Run the multimodal projector (mmproj / vision encoder) on the GPU. Accepts
          * 'true'/'on'/'1' or 'false'/'off'/'0'. When unset, the backend is auto-selected
@@ -300,7 +315,10 @@ declare namespace LlmLlamacpp {
          * conversation needs at least k + 1; with the default 1, editing the last
          * user message reprocesses everything. `0` keeps and takes none (every
          * divergent turn is a cold prefill), the maximum is 1024.
-         * Ignored on pure-attention models, which never take checkpoints.
+         * Sliding-window models (Gemma 3/4, gpt-oss, without `swa_full`) take
+         * them too: their checkpoints hold the window cells, restored when a
+         * turn diverges behind the window. Ignored on other pure-attention
+         * models, which never take checkpoints.
          * Also accepted as `cache-checkpoints`; supplying both is an error.
          */
         cache_checkpoints?: NumericLike;
@@ -309,8 +327,9 @@ declare namespace LlmLlamacpp {
          * `cache_checkpoints`: the oldest checkpoints are dropped until the total
          * payload fits. `0` (default) is unlimited. When set, the model load fails
          * with `InvalidArgument` if the budget cannot hold `cache_checkpoints`
-         * checkpoints of the largest size the context allows, so a misconfigured
-         * budget is reported up front rather than discovered mid-conversation.
+         * checkpoints of the largest size the context allows (on a sliding-window
+         * model, a full window), so a misconfigured budget is reported up front
+         * rather than discovered mid-conversation.
          * Also accepted as `cache-checkpoints-max-bytes`.
          */
         cache_checkpoints_max_bytes?: NumericLike;
@@ -320,7 +339,9 @@ declare namespace LlmLlamacpp {
          * touches the disk, `'disk'` writes them to files in
          * `cache_checkpoint_dir`, which it requires. Each snapshot holds only the
          * state a tail trim cannot rebuild, a size fixed by the model (about 20 MB
-         * on Qwen3.5-0.8B). Also accepted as `cache-checkpoint-storage`.
+         * on Qwen3.5-0.8B; on sliding-window models the window cells, which reach
+         * hundreds of MB on larger ones). Also accepted as
+         * `cache-checkpoint-storage`.
          */
         cache_checkpoint_storage?: "disk" | "memory";
         /**
@@ -343,6 +364,43 @@ declare namespace LlmLlamacpp {
          * maximum is 1048576 (1 TiB). Also accepted as `cache-ram-mib`.
          */
         cache_ram_mib?: NumericLike;
+        /**
+         * Speculative decoding, as llama-server's `--spec-type`. `'draft-mtp'`
+         * drafts with the model's own multi-token-prediction (MTP / NextN) head,
+         * or with the external MTP head given as `spec_draft_model`; the model or
+         * the head must ship MTP layers (`blk.N.nextn.*`), or the load fails.
+         * `'draft-dflash'` drafts with the DFlash model given as
+         * `spec_draft_model`. Either way the model verifies the draft, so the
+         * output keeps the distribution of plain decoding. `'none'` (default)
+         * decodes one token per step. Works on single prompts, multimodal
+         * prompts and continuous batching. Also accepted as `spec-type`.
+         */
+        spec_type?: "none" | "draft-mtp" | "draft-dflash";
+        /**
+         * Absolute path of the draft model, as llama-server's
+         * `--spec-draft-model` (`-md`): the DFlash model, required by
+         * `spec_type: 'draft-dflash'`, or an external MTP head for
+         * `spec_type: 'draft-mtp'`. The draft model is placed like the model
+         * (`device`, `gpu_layers`). Also accepted as `spec-draft-model`.
+         */
+        spec_draft_model?: string;
+        /**
+         * Longest draft per step (default 3, maximum 64), as
+         * `--spec-draft-n-max`. Requires `spec_type`. Also accepted as
+         * `spec-draft-n-max`.
+         */
+        spec_draft_n_max?: NumericLike;
+        /**
+         * Shortest draft worth verifying (default 0); shorter drafts are
+         * dropped. As `--spec-draft-n-min`. Also accepted as `spec-draft-n-min`.
+         */
+        spec_draft_n_min?: NumericLike;
+        /**
+         * Minimum draft-head probability for a token to extend the draft
+         * (default 0, between 0 and 1), as `--spec-draft-p-min`. Also accepted
+         * as `spec-draft-p-min`.
+         */
+        spec_draft_p_min?: NumericLike;
         [key: string]: string | number | boolean | string[] | undefined;
     }
     interface LlmLlamacppArgs {
@@ -578,6 +636,13 @@ declare namespace LlmLlamacpp {
          */
         avgConcurrentSeq: number;
         backendDevice: "cpu" | "gpu";
+        /**
+         * Draft tokens proposed by speculative decoding, and how many of them
+         * the model accepted (llama-server's `draft_n` / `draft_n_accepted`).
+         * Present only when the model was loaded with `spec_type`.
+         */
+        draftTokens?: number;
+        draftAcceptedTokens?: number;
         /**
          * Why generation stopped. Per-sequence, so it is reported for a single
          * request on either path (sequential or one prompt on a parallel model).

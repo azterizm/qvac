@@ -66,17 +66,25 @@ test('documented TTS dispatch exercises matrix flattening and override validatio
 
 test('AudioGen native build restores caches, limits builds and propagates failures', () => {
   const source = readFileSync(join(ROOT, '.github/workflows/cpp-test-coverage-audiogen-ggml.yml'), 'utf8')
-  assert.doesNotMatch(source, /fuzz-ready|needs.detect|fuzz:build|fuzz:run/)
+  assert.doesNotMatch(source, /fuzz-ready|needs.detect/)
   const manifest = JSON.parse(readFileSync(join(ROOT, 'packages/audiogen-ggml/package.json'), 'utf8'))
   assert.ok(manifest.scripts['build:native'])
+  assert.ok(manifest.scripts['fuzz:build'])
+  assert.ok(manifest.scripts['fuzz:run'])
   assert.match(source, /cppBuildJobs: 2/)
   assert.match(source, /hasCcache: true/)
   assert.match(source, /vcpkg-binary-cache-dir/)
   assert.match(source, /vcpkg-toolchain-fingerprint/)
   assert.match(source, /configure-cpp-build.mjs/)
   assert.match(source, /npm run build:native/)
+  assert.match(source, /npm install --ignore-scripts/)
   assert.match(source, /No addon-level C\+\+ tests yet/)
+  assert.match(source, /npm run fuzz:build/)
+  assert.match(source, /npm run fuzz:run/)
   assert.doesNotMatch(source, /continue-on-error/)
+  const saveCcache = source.indexOf('name: Save ccache (trusted contexts)')
+  const fuzzBuild = source.indexOf('name: Build fuzz targets')
+  assert.ok(saveCcache > 0 && fuzzBuild > saveCcache, 'fuzz reconfigure must follow the native cache save')
   const result = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c',
     'npm() { return 134; }\nnpm run build:native'], { encoding: 'utf8' })
   assert.equal(result.status, 134, result.stderr)
@@ -115,6 +123,30 @@ test('AudioGen rejects alternate code in cache-writing events before checkout', 
   assert.match(pr, /if: github.event_name == 'pull_request' \|\| github.event_name == 'pull_request_target'/)
   assert.match(pr, /ref: \$\{\{ inputs.ref \|\| github.ref \}\}/)
   assert.ok(source.indexOf('Validate checkout inputs') < source.indexOf('name: Checkout repository'))
+})
+
+test('translation carve-out restores both vcpkg layers and saves them before its tests run', () => {
+  const source = readFileSync(join(ROOT, '.github/workflows/reusable-cpp-tests-translation-nmtcpp.yml'), 'utf8').replaceAll('\r\n', '\n')
+  const blocks = source.split('\n      - ')
+  const checkout = blocks.find((text) => text.startsWith('uses: actions/checkout@'))
+  assert.ok(checkout.includes('repository: ${{ inputs.repository || github.event.pull_request.head.repo.full_name || github.repository }}\n'))
+  assert.ok(checkout.includes('ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}\n'))
+  const names = blocks.map((text) => text.match(/^name: (.+)\n/)?.[1])
+  const order = ['Configure vcpkg', 'Point vcpkg at its binary cache', 'Fingerprint the toolchain', 'Get vcpkg cache (restore)',
+    'Build C++ tests with coverage', 'Sync the host and workspace vcpkg caches', 'Save vcpkg cache (trusted contexts)', 'Run C++ tests']
+  const positions = order.map((name) => names.indexOf(name))
+  order.forEach((name, index) => assert.ok(positions[index] > 0, `Missing step: ${name}`))
+  assert.deepEqual(positions, [...positions].sort((a, b) => a - b))
+  const restore = blocks[positions[order.indexOf('Get vcpkg cache (restore)')]]
+  assert.match(restore, /format\('\{0\}\/vcpkg\.json', env\.WORKDIR\)/)
+  assert.match(restore, /'vcpkg-overlays\/triplets\/\*\*'/)
+  assert.match(restore, /env\.TOOLCHAIN_FINGERPRINT/)
+  assert.match(blocks[positions[order.indexOf('Save vcpkg cache (trusted contexts)')]], /steps\.vcpkg-cache\.outputs\.cache-primary-key/)
+  const push = source.split('\n  push:\n')[1].split('\n  schedule:\n')[0]
+  for (const path of ['packages/translation-nmtcpp/vcpkg.json', 'packages/translation-nmtcpp/vcpkg-configuration.json',
+    'packages/translation-nmtcpp/vcpkg/**', 'vcpkg-overlays/triplets/**', 'vcpkg-overlays/toolchains/**', '.github/actions/vcpkg-*/**']) {
+    assert.ok(push.includes(`- '${path}'\n`), `push paths miss cache key input ${path}`)
+  }
 })
 
 test('compiler caches are isolated per package and use compiler contents', () => {
