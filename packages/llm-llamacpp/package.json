@@ -80,6 +80,7 @@
   "homepage": "https://qvac.tether.io",
   "devDependencies": {
     "bare": "^1.36.0",
+    "bare-runtime": "^1.36.0",
     "bare-make": "^2.1.0",
     "cmake-toolchains": "^2.1.0",
     "cmake-runtime": "^4.1.1",
