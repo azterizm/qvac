@@ -351,7 +351,8 @@ const SINGLE_FILE_MANIFEST = [
     sha256: '56e4c6cfe73b0c82e3e82bc518d7591997e61d81f723fc41a586f4fa69ea2453'
   },
   {
-    scope: 'ci',
+    // Optional while the gianni-cor Hugging Face repo returns 401; test_model_metadata skips it when missing.
+    scope: 'optional',
     url: 'https://huggingface.co/gianni-cor/bitnet_b1_58-large-TQ2_0/resolve/main/bitnet_b1_58-large-TQ2_0.gguf',
     dest: 'bitnet_b1_58-large-TQ2_0.gguf',
     sha256: '281aafb18a9f4a3124c10a1d8683e2296f0cfe8a2944da0a5667d17488a951bb'
