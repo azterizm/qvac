@@ -208,6 +208,14 @@
       "sha256": "506d311f2f8802991344f7186badffda9c6a6b4cb50aa7a759ba3d939544df44",
       "bytes": 1917190432
     },
+    "bitnet_b1_58-large-TQ2_0.gguf": {
+      "urls": [
+        "https://huggingface.co/gianni-cor/bitnet_b1_58-large-TQ2_0/resolve/e3131d78f06395ab62f7e7fb6c9ae9c00d829db0/bitnet_b1_58-large-TQ2_0.gguf"
+      ],
+      "sha256": "281aafb18a9f4a3124c10a1d8683e2296f0cfe8a2944da0a5667d17488a951bb",
+      "bytes": 217082208,
+      "warm": false
+    },
     "LightOnOCR-2-1B-ocr-soup-Q4_K_M.gguf": {
       "urls": [
         "https://huggingface.co/noctrex/LightOnOCR-2-1B-ocr-soup-GGUF/resolve/a683d3cac5f26cc2039d117528d3e04e400bad56/LightOnOCR-2-1B-ocr-soup-Q4_K_M.gguf"

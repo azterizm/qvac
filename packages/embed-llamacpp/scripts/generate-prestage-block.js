@@ -77,8 +77,9 @@ function modelsFromS3Map(manifest) {
   if (!raw || typeof raw !== 'object') {
     throw new Error(`[prestage] PRESTAGE_S3_MODELS ${mapPath} is not a JSON object`)
   }
+  const staged = new Set(mobileModelNames(manifest))
   return Object.entries(raw).map(([name, url]) => {
-    if (manifest.models[name]) {
+    if (staged.has(name)) {
       throw new Error(`[prestage] ${name} is in the manifest; stage it from there`)
     }
     if (typeof url !== 'string' || !url.startsWith('https://')) {
