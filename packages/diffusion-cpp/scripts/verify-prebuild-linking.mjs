@@ -157,6 +157,7 @@ if (!prebuildsDir) {
 
 let failures = 0
 let checkedTargets = 0
+let linuxCheckedTargets = 0
 const fail = (msg) => {
   failures++
   console.error(`FAIL: ${msg}`)
@@ -170,6 +171,7 @@ for (const target of TARGETS) {
     continue
   }
   checkedTargets++
+  linuxCheckedTargets++
 
   const addonNeeded = elfNeeded(fs.readFileSync(addonPath))
   console.log(`${target}/${moduleName}.bare NEEDED: ${addonNeeded.join(', ')}`)
@@ -232,8 +234,9 @@ for (const target of WIN_TARGETS) {
   }
 }
 
-if (checkedTargets === 0) {
-  console.error('FAIL: no linux or win32 prebuilds found to verify (artifact download broken?)')
+// A present win32 prebuild must not hide missing linux ones.
+if (linuxCheckedTargets === 0) {
+  console.error('FAIL: no linux prebuilds found to verify (artifact download broken?)')
   process.exit(1)
 }
 if (failures > 0) {

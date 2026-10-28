@@ -144,7 +144,14 @@ void logBackendModulePathSnapshot(
           "Backend module path iteration error: " + ec.message());
       break;
     }
-    const auto filename = utf8(dirEntry.path().filename());
+    // MSVC's u8string() throws on a name that is not valid UTF-16; skip it
+    // rather than fail the model load from a log-only scan.
+    std::string filename;
+    try {
+      filename = utf8(dirEntry.path().filename());
+    } catch (const std::exception&) {
+      continue;
+    }
     if (filename.rfind(BACKEND_MODULE_PREFIX, 0) == 0 &&
         dirEntry.path().extension() == BACKEND_MODULE_EXTENSION) {
       entries.push_back(filename);
