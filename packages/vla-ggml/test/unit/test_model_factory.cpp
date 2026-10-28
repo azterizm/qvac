@@ -267,3 +267,10 @@ TEST(VlaModelFactory, AutoBackendStillFallsBackToCpu) {
   }
   cleanupTempFile(path);
 }
+
+TEST(VlaModelFactory, DescribeOverrideJoinsFamiliesWithCommas) {
+  using vla_backend_selection::describeBackendOverride;
+  EXPECT_EQ(describeBackendOverride({}), "");
+  EXPECT_EQ(describeBackendOverride({"cuda"}), "cuda");
+  EXPECT_EQ(describeBackendOverride({"cuda", "vulkan"}), "cuda,vulkan");
+}

@@ -267,10 +267,3 @@ TEST(VlaBackendSelection, Adreno740Rejected) {
 TEST(VlaBackendSelection, MaliVulkanAccepted) {
   EXPECT_EQ(pick({{"Vulkan0", "Mali-G715", kGpu}}), "Vulkan0");
 }
-
-TEST(VlaBackendSelection, DescribeOverrideJoinsFamiliesWithCommas) {
-  using vla_backend_selection::describeBackendOverride;
-  EXPECT_EQ(describeBackendOverride({}), "");
-  EXPECT_EQ(describeBackendOverride({"cuda"}), "cuda");
-  EXPECT_EQ(describeBackendOverride({"cuda", "vulkan"}), "cuda,vulkan");
-}
