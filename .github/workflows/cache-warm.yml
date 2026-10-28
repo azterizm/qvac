@@ -26,9 +26,6 @@ on:
         description: Comma-separated package names or directories; empty warms every package on the contract
         type: string
         default: ""
-  # Registers the workflow from a branch; every job is off for this event.
-  pull_request:
-    paths: [.github/workflows/cache-warm.yml]
 
 permissions: {}
 
