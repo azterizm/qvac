@@ -32,6 +32,10 @@ linkWorkspacePackages: true
 publicHoistPattern:
   - "@qvac/fabric-*"
 
+# pnpm's shims and exec/run otherwise export NODE_PATH into its store to every child process, so a package a test
+# removes still resolves; npm never sets it.
+extendNodePath: false
+
 # Keep root-only repository tooling from supplying peers to product packages.
 resolvePeersFromWorkspaceRoot: false
 
