@@ -19,7 +19,8 @@
 - Both Linux prebuilds require the CUDA module alongside Vulkan, in PR
   validation and the release artifact build, while retaining the addon's
   independence from GPU runtime libraries.
-- Pin the server CUDA architecture list, including native SM80 code, and
+- Match qvac-fabric's CUDA targets per Linux platform: six targets on x64
+  and only `121a-real` on ARM64 to limit package size. Include native SM80 and
   validate the CUDA 13.0.3 release compiler in the ggml registry port. Track
   the toolkit marker in diffusion's vcpkg cache identity and document
   automatic CUDA-to-Vulkan/CPU fallback and explicit device selection.

@@ -146,23 +146,25 @@ CUDA execution requires the NVIDIA driver and CUDA 13 runtime/cuBLAS
 libraries on the host; the addon itself retains CPU-only load compatibility.
 Windows CUDA remains an explicit source-build option.
 
-The server CUDA build uses CUDA 13.0.3 (nvcc 13.0.88) and the registry's
-explicit architecture list, shared by Linux x64 and ARM64:
+The server CUDA build uses CUDA 13.0.3 (nvcc 13.0.88) and matches
+qvac-fabric's packaged architectures for each Linux platform:
 
-```text
-75-virtual;80-virtual;80-real;86-real;89-real;90-virtual;120a-real;121a-real
-```
+| Linux package | CUDA architectures |
+| --- | --- |
+| x64 | `75-virtual;80-real;86-real;89-real;90-virtual;120a-real` |
+| ARM64 | `121a-real` |
 
 `virtual` targets carry PTX that the driver compiles on first use; `real`
-targets carry native GPU code. This includes PTX for T4 (7.5), native code for
-A100 (8.0), `120a-real` for RTX 5090, and `121a-real` for DGX Spark. The host
-addon must also match the CPU architecture. This package does not ship a
-separate Jetson CUDA module.
+targets carry native GPU code. The x64 module includes T4 PTX, native A100
+code, and RTX 5090 code. The ARM64 CUDA module ships DGX Spark code only to
+keep the npm platform package within its size limit. The host addon must
+also match the CPU architecture. This package does not ship a separate
+Jetson CUDA module.
 
 When `QVAC_CUDA_TOOLKIT=13.0.3-server` is set, the registry rejects a different
 nvcc version. `CUDACXX` selects the compiler explicitly, followed by
-`CUDA_PATH`, `/usr/local/cuda`, and `PATH`. Local builds with another toolkit
-version >= 12.9 warn; they are not release builds.
+`CUDA_PATH`, `/usr/local/cuda`, and `PATH`. Other local toolkits require at
+least CUDA 12.8 for x64 or 12.9 for ARM64 and warn; they are not release builds.
 
 With automatic backend selection, CUDA devices whose code cannot run are
 skipped, allowing Vulkan or ultimately CPU to be selected. Set
