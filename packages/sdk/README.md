@@ -29,6 +29,9 @@ package manager can replace an older, incompatible runtime. Remove any override
 or resolution that forces the worker below that requirement; installing a newer
 global `bare` executable does not change the SDK's worker dependency.
 
+In a web page, the SDK runs its worker in a Dedicated Worker and the LLM addon
+on WebGPU (experimental). See [docs/browser.md](docs/browser.md).
+
 For mobile apps that use only raw PCM streaming transcription, list the required audio plugins and set `"includeAudioDecoder": false` in `qvac.config.*` before bundling or running Expo prebuild. You can also use `qvac bundle sdk --defer bare-ffmpeg`. Both options leave `bare-ffmpeg` out of the native addon manifest. Bundle FFmpeg when the app decodes compressed audio files or asks `audiogen-ggml` for a compressed output format; PCM and WAV output need no FFmpeg.
 
 ## Quickstart
