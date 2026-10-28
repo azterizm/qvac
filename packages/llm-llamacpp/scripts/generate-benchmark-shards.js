@@ -140,9 +140,7 @@ if (mode === 'groups') {
     )
     process.exit(1)
   }
-  console.log(
-    `OK: integration.auto.cjs matches the matrix (${matrix().length} shards).`
-  )
+  console.log(`OK: integration.auto.cjs matches the matrix (${matrix().length} shards).`)
 } else if (mode === 'assert') {
   const missing = assertShards()
   if (missing) {
