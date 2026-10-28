@@ -1,12 +1,18 @@
 // Browser replacement for handlers/load-model/safe-fetch.ts. fetch() follows
 // redirects itself and hides the intermediate responses, so redirect hops are
-// not individually checked and Hub SHA-256 headers are only seen when the
-// final response exposes them (CORS).
+// not individually checked, and the Hub SHA-256 that native safeFetch reads
+// from the Hugging Face hop is never available: hubSha256 stays undefined
+// rather than trusting whatever ETag the final (CDN) response exposes.
 import { Readable } from 'bare-stream'
-import { extractHubSha256, isHuggingFaceHost, isSecureDownloadUrl } from '@/utils/url-security'
+import { isSecureDownloadUrl } from '@/utils/url-security'
 import { DownloadCancelledError, InsecureModelSourceError } from '@/errors/index'
 import type { SafeFetchOptions, SafeFetchResponse } from '@/handlers/load-model/safe-fetch'
-import { browser, type FetchResponse, type WebReadableStream } from './globals'
+import {
+  browser,
+  type FetchResponse,
+  type WebAbortController,
+  type WebReadableStream
+} from './globals'
 import { readChunks } from './fs'
 
 export type { SafeFetchOptions, SafeFetchResponse }
@@ -20,8 +26,12 @@ function assertSecure(url: URL, original: string): void {
   }
 }
 
-function bodyStream(body: WebReadableStream | null): Readable {
-  return Readable.from(body ? readChunks(body.getReader()) : [])
+// Destroying the stream (the caller's stall watchdog, a cancel) aborts the
+// fetch, which also ends a read that is waiting on a silent connection.
+function bodyStream(body: WebReadableStream | null, controller: WebAbortController): Readable {
+  const stream = Readable.from(body ? readChunks(body.getReader()) : [])
+  stream.on('close', () => controller.abort())
+  return stream
 }
 
 export async function safeFetch(
@@ -29,7 +39,6 @@ export async function safeFetch(
   options: SafeFetchOptions = {}
 ): Promise<SafeFetchResponse> {
   const enforceSecureTransport = options.enforceSecureTransport ?? false
-  const captureHashFromHost = options.captureHashFromHost ?? isHuggingFaceHost
 
   let url: URL
   try {
@@ -60,8 +69,9 @@ export async function safeFetch(
     }
     throw error
   } finally {
+    // The connection timeout ends with the headers. The caller's signal keeps
+    // aborting the request while the body streams.
     if (timer !== undefined) clearTimeout(timer)
-    options.signal?.removeEventListener('abort', onAbort)
   }
 
   const finalUrl = new URL(response.url || url.href)
@@ -71,18 +81,13 @@ export async function safeFetch(
   response.headers.forEach((value, key) => {
     headers[key] = value
   })
-  const hubSha256 =
-    captureHashFromHost(url.hostname) || captureHashFromHost(finalUrl.hostname)
-      ? extractHubSha256(headers)
-      : undefined
 
   return {
     status: response.status,
     statusText: response.statusText,
     headers,
-    body: bodyStream(response.body),
+    body: bodyStream(response.body, controller),
     finalUrl: finalUrl.href,
-    redirected: response.redirected,
-    hubSha256
+    redirected: response.redirected
   }
 }
