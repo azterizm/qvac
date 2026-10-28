@@ -84,6 +84,7 @@ jobs:
     secrets: inherit
     with:
       rows: ${{ toJSON(fromJSON(needs.select.outputs.matrices).build) }}
+      reuse: true
 
   # Folds a package's build jobs into prebuilds-<slug>, which the mobile run installs from this run.
   merge:

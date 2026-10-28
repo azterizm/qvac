@@ -91,6 +91,7 @@ jobs:
     secrets: inherit
     with:
       rows: ${{ toJSON(needs.route.outputs.run_prebuilds == 'true' && fromJSON(needs.select.outputs.matrices).build || fromJSON(needs.select.outputs.matrices)['build:baseline']) }}
+      reuse: true
 
   # Folds a package's build jobs into prebuilds-<slug>, taking its own prebuilds from each job's artifact.
   merge:

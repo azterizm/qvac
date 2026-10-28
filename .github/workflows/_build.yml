@@ -9,11 +9,49 @@ on:
         description: JSON build rows from _select-projects, one per package and build configuration
         type: string
         required: true
+      reuse:
+        description: Take a leg from an earlier run on this branch when its native code and build inputs are unchanged
+        type: boolean
+        default: false
 
 permissions: {}
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+      reused: ${{ steps.plan.outputs.reused }}
+    steps:
+      - name: Checkout actions
+        uses: tetherto/qvac-actions/checkout@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Checkout source
+        uses: tetherto/qvac-actions/checkout@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: src
+          persist-credentials: "false"
+      - id: plan
+        shell: bash
+        env:
+          ROWS: ${{ inputs.rows }}
+          SRC: src
+          REUSE: ${{ inputs.reuse && (github.event.pull_request.head.repo.full_name || github.repository) == github.repository }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/prebuild-reuse.mjs
+
   build:
+    needs: plan
+    if: needs.plan.outputs.build != '[]'
     name: ${{ matrix.row.slug }} ${{ matrix.row.config }}
     runs-on: ${{ matrix.row.runner }}
     environment: release
@@ -25,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        row: ${{ fromJSON(inputs.rows) }}
+        row: ${{ fromJSON(needs.plan.outputs.build) }}
     env:
       WORKDIR: src/${{ matrix.row.dir }}
       NX_DAEMON: "false"
@@ -149,3 +187,41 @@ jobs:
           path: |
             src/package.json
             src/packages/*/prebuilds
+      # The same files under the leg's key, for a later run on this branch to reuse.
+      - uses: tetherto/qvac-actions/upload-artifact@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          name: ${{ matrix.row.cacheName }}
+          retention-days: "14"
+          path: |
+            src/package.json
+            src/packages/*/prebuilds
+
+  # A leg an earlier run built from the same native code and inputs, under this run's name for the jobs downstream.
+  reuse:
+    needs: plan
+    if: needs.plan.outputs.reused != '[]'
+    name: reuse ${{ matrix.row.slug }} ${{ matrix.row.config }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        row: ${{ fromJSON(needs.plan.outputs.reused) }}
+    steps:
+      - name: Checkout actions
+        uses: tetherto/qvac-actions/checkout@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: tetherto/qvac-actions/download-artifact@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          name: ${{ matrix.row.name }}
+          run-id: ${{ matrix.row.runId }}
+          github-token: ${{ github.token }}
+          path: leg
+      - uses: tetherto/qvac-actions/upload-artifact@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
+        with:
+          name: prebuild-${{ matrix.row.slug }}-${{ matrix.row.config }}
+          path: leg/
