@@ -137,10 +137,10 @@ if(GGML_BACKEND_DL AND (ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "Linux"))
   endforeach()
 endif()
 
-# On Windows the ggml portfile moves the MODULE .dll files into vcpkg's lib/.
-# They have no import library, so find_library cannot surface them; stage
-# them as loose files into the same per-host subdir cmake-bare uses for the
-# INSTALL TARGET exports above, which is where BackendLoader scans.
+# On Windows ggml installs the MODULE .dll files into vcpkg's lib/ (a MODULE
+# is a LIBRARY artifact to install(TARGETS)). Stage them as loose files into
+# the same per-host subdir cmake-bare uses for the INSTALL TARGET exports
+# above, which is where BackendLoader scans.
 set(BACKEND_DL_LOOSE_DLLS "")
 if(GGML_BACKEND_DL AND WIN32)
   file(GLOB BACKEND_DL_LOOSE_DLLS
