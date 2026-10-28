@@ -199,7 +199,7 @@ Non-Adreno GPUs are accepted. On Adreno hardware:
   OpenCL 3.0 support, kernel-compile failures on several ggml ops, and
   shared-memory OOMs).
 
-When no acceptable GPU is found the addon falls back to CPU; to force CPU
+Under `'auto'`, when no acceptable GPU is found the addon falls back to CPU; to force CPU
 regardless, pass `backend: 'cpu'` to `load()`.
 
 Among accepted devices the order is CUDA, then HIP/ROCm, then anything else
@@ -219,11 +219,13 @@ resurrect a device they rejected. Setting `CUDA_VISIBLE_DEVICES=-1` in the
 environment is an equivalent way to force Vulkan without touching the config.
 
 A GPU list never ends on CPU, unlike `'auto'`, unless it also names `auto`,
-as in `'cuda,auto'`. If no usable GPU matches, the
-backend fails to init, or the weights do not fit on the device (Jetson Orin
-8GB, `cudaMalloc` of the 3.7 GB weight buffer fails with NvMap error 12),
-`load()` rejects with `FAILED_TO_LOAD_WEIGHTS` instead of running on CPU at
-50x the latency. `model.backendName` after `load()` names the device in use.
+as in `'cuda,auto'`. A named family that is absent still falls through to
+another accepted GPU, so `'cuda'` on a Mac runs on Metal; check
+`model.backendName` after `load()` for the device in use. If the host has no
+usable GPU at all, the backend fails to init, or the weights fail to load on
+the device (Jetson Orin 8GB, `cudaMalloc` of the 3.7 GB weight buffer fails
+with NvMap error 12), `load()` rejects with `FAILED_TO_LOAD_WEIGHTS` instead
+of running on CPU at 50x the latency.
 
 ## Built With
 

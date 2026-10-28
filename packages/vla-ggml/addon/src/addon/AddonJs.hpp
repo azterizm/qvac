@@ -310,7 +310,7 @@ inline js_value_t* createInstance(js_env_t* env, js_callback_info_t* info) try {
   const VlaEmbodimentRequest embodiment = detail::parseEmbodimentRequest(args);
   const bool forceCpu = (backend == "cpu");
   // 'cpu' is handled by forceCpu above and is not a GPU family name, so it
-  // never reaches parseBackendOverride. 'auto' is the documented default from
+  // never reaches parseBackendRequest. 'auto' is the documented default from
   // index.js and an empty value is an unset key; both mean no preference.
   const bool noPreference = forceCpu || backend.empty() || backend == "auto";
   const std::vector<std::string> backendOverride =

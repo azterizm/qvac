@@ -302,7 +302,9 @@ function validateRunInput(input, hparams) {
         // `empty_camera_0`, masked out of attention at train time) is run by
         // dropping that trailing view; pi05Inference accepts the same range.
         const numCameras = hparams.numCameras;
-        if (typeof numCameras === "number" && input.images.length > numCameras) {
+        if (typeof numCameras === "number" &&
+            Number.isInteger(numCameras) &&
+            input.images.length > numCameras) {
             throw new QvacErrorAddonVla({
                 code: ERR_CODES.INVALID_INPUT,
                 adds: `pi05 takes 1..${numCameras} camera images (got ${input.images.length})`,

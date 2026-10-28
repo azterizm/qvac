@@ -149,10 +149,11 @@ declare namespace VlaModel {
      *   vulkan, metal, opencl, hip, rocm and sycl; an unrecognised name is an
      *   error. A family whose device the Adreno gate rejected stays rejected.
      *   Unlike `"auto"`, a list never ends on CPU unless it also names
-     *   `auto`, as in `"cuda,auto"`: no usable GPU, a backend
-     *   that fails to init, or a weight allocation that fails on the device
-     *   rejects `load()` with `FAILED_TO_LOAD_WEIGHTS`. Check `backendName`
-     *   after `load()` for the device that was picked.
+     *   `auto`, as in `"cuda,auto"`. A host with no usable GPU at all, a
+     *   backend that fails to init, or weights that fail to load on the
+     *   device reject `load()` with `FAILED_TO_LOAD_WEIGHTS`. An absent family
+     *   still falls through to another GPU, so check `backendName` after
+     *   `load()` for the device that was picked.
      */
     type VlaBackendSelector = "auto" | "cpu" | (string & {});
     interface VlaRunInput {
