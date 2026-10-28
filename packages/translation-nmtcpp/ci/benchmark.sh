@@ -46,11 +46,14 @@ fi
 
 venv=$(mktemp -d)/venv
 py=python3; command -v python3 >/dev/null 2>&1 || py=python
-# Hosted runners use Python 3.10, as main pinned there: bergamot>=0.4.5 publishes no wheels for newer Pythons.
+# Hosted runners use Python 3.10, as main pinned there: bergamot>=0.4.5 has wheels for 3.10 and older only. The
+# ubuntu-24.04 image caches 3.11 and newer, so 3.10 comes from the deadsnakes PPA.
 if $hosted; then
-  py=$(ls -d "${RUNNER_TOOL_CACHE:-/opt/hostedtoolcache}"/Python/3.10.*/x64/bin/python3 2>/dev/null | sort -V | tail -1)
-  [ -n "$py" ] || py=$(command -v python3.10 || true)
-  [ -n "$py" ] || { echo "::error::no Python 3.10 on this hosted runner"; exit 1; }
+  if ! command -v python3.10 >/dev/null 2>&1; then
+    sudo add-apt-repository -y ppa:deadsnakes/ppa
+    sudo apt-get install -y python3.10 python3.10-venv
+  fi
+  py=python3.10
 fi
 "$py" -m venv "$venv"
 PYBIN="$venv/bin/python"; [ -x "$PYBIN" ] || PYBIN="$venv/Scripts/python.exe"
