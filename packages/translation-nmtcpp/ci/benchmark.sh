@@ -45,7 +45,14 @@ if [ "$platform" = linux-x64 ] && $hosted; then
 fi
 
 venv=$(mktemp -d)/venv
-if command -v python3 >/dev/null 2>&1; then python3 -m venv "$venv"; else python -m venv "$venv"; fi
+py=python3; command -v python3 >/dev/null 2>&1 || py=python
+# Hosted runners use Python 3.10, as main pinned there: bergamot>=0.4.5 publishes no wheels for newer Pythons.
+if $hosted; then
+  py=$(ls -d "${RUNNER_TOOL_CACHE:-/opt/hostedtoolcache}"/Python/3.10.*/x64/bin/python3 2>/dev/null | sort -V | tail -1)
+  [ -n "$py" ] || py=$(command -v python3.10 || true)
+  [ -n "$py" ] || { echo "::error::no Python 3.10 on this hosted runner"; exit 1; }
+fi
+"$py" -m venv "$venv"
 PYBIN="$venv/bin/python"; [ -x "$PYBIN" ] || PYBIN="$venv/Scripts/python.exe"
 "$PYBIN" -m pip install --upgrade pip
 if $hosted; then
@@ -134,7 +141,9 @@ for pair in "${PAIRS[@]}"; do
   fi
   if [[ ",$translators," == *,bergamot,* ]]; then firefox_models "$src$trg" || echo "::warning::Firefox models for $pair failed"; fi
   if [[ ",$translators," == *,qvac_bergamot,* ]]; then cdn_models "$src" "$trg" || echo "::warning::CDN models for $pair failed"; fi
-  results="$PKG/benchmarks/results/results-$pair-$translators-$metrics-$hyperparams$([ "$pivot" = true ] && echo -pivot)-$platform"
+  # An if, not $([ ... ] && echo): a false test there fails the assignment under set -e.
+  suffix=""; if [ "$pivot" = true ]; then suffix=-pivot; fi
+  results="$PKG/benchmarks/results/results-$pair-$translators-$metrics-$hyperparams$suffix-$platform"
   for dataset in "${DATASETS[@]}"; do
     echo "== $pair on $dataset"
     (cd "$EVAL" && PYTHONUNBUFFERED=1 "$PYBIN" evaluate.py --pairs "$pair" --translators "$translators" --dataset "$dataset" \
