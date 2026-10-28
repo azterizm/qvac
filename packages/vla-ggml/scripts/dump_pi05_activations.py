@@ -706,7 +706,20 @@ def main() -> int:
         help="If set, also write a fixtures pin JSON to this path (defaults to "
         "scripts/oracle_fixtures.json next to this script).",
     )
+    parser.add_argument(
+        "--mask-cameras",
+        type=int,
+        nargs="+",
+        default=[],
+        help="Camera indices to mask out of attention, as openpi does for an "
+        "empty camera slot. '--mask-cameras 2' gives the reference for "
+        "PI05_TEST_ACTIONS_2CAM: the native run drops that view instead. "
+        "Without --write-fixtures-json the pin JSON is left alone.",
+    )
     args = parser.parse_args()
+    for cam in args.mask_cameras:
+        if not 0 <= cam < NUM_CAMERAS:
+            parser.error(f"--mask-cameras {cam} is outside 0..{NUM_CAMERAS - 1}")
 
     out_dir = Path(args.out_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -715,11 +728,14 @@ def main() -> int:
     print(f"checkpoint: {args.checkpoint}")
     print(f"out_dir:    {out_dir}")
     print(f"seed:       {args.seed}")
+    print(f"masked:     {args.mask_cameras}")
 
     t0 = time.time()
 
     # --- 1. Build & write the deterministic fixture ------------------------
     fixture = build_fixture(args.seed)
+    for cam in args.mask_cameras:
+        fixture["fixture.img_masks"][cam] = False
     fixture_path = out_dir / "fixture.safetensors"
     st_save_file(fixture, str(fixture_path))
     print(f"[fixture] wrote {fixture_path} "
@@ -777,6 +793,11 @@ def main() -> int:
     print(f"[verify] ode.actions_final shape = {reloaded['ode.actions_final'].shape}")
 
     # --- 7. Fixtures JSON ------------------------------------------------
+    # A masked-camera dump is a side reference, not the pinned fixture.
+    if args.mask_cameras and not args.write_fixtures_json:
+        print("[fixtures] masked-camera run, oracle_fixtures.json not written")
+        print(f"== done in {time.time() - t0:.1f} s ==")
+        return 0
     fixtures_json_path = (
         Path(args.write_fixtures_json).resolve()
         if args.write_fixtures_json

@@ -45,6 +45,24 @@ It also runs a **contract check**: every breakpoint named in `plan.md §5`
 must end up in the dump. Failure here exits non-zero — the missing-key list
 points straight at a hook that silently stopped firing.
 
+### Two-camera reference
+
+`pi05.test.js` checks a run with only the first two cameras against
+`PI05_TEST_ACTIONS_2CAM` when it is set. Make that file with the third
+camera masked out of attention, the way openpi treats an empty camera slot:
+
+```bash
+python packages/vla-ggml/scripts/dump_pi05_activations.py \
+  --checkpoint   lerobot/pi05_base \
+  --out-dir      packages/vla-ggml/scripts/oracle_dump_2cam/ \
+  --seed         0 \
+  --mask-cameras 2
+```
+
+Use the same `--seed` as the main dump so the images, tokens and noise match,
+then point `PI05_TEST_ACTIONS_2CAM` at `oracle_dump_2cam/activations.safetensors`.
+The pin JSON is not touched by a masked run.
+
 ## Determinism contract
 
 The dump is deterministic for a fixed:
