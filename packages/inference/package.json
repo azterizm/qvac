@@ -149,7 +149,44 @@
     "./llamacpp-decision/plugin": {
       "types": "./dist/plugins/builtin/llamacpp-decision/plugin.d.ts",
       "import": "./dist/plugins/builtin/llamacpp-decision/plugin.js"
+    },
+    "./llamacpp-rerank/plugin": {
+      "types": "./dist/plugins/builtin/llamacpp-rerank/plugin.d.ts",
+      "import": "./dist/plugins/builtin/llamacpp-rerank/plugin.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js"
     }
+  },
+  "browser": {
+    "bare-fs": "./dist/browser/fs.js",
+    "bare-path": "./dist/browser/path.js",
+    "bare-os": "./dist/browser/os.js",
+    "bare-env": "./dist/browser/env.js",
+    "bare-crypto": "./dist/browser/crypto.js",
+    "bare-buffer": "./dist/browser/buffer.js",
+    "bare-abort-controller": "./dist/browser/abort-controller.js",
+    "bare-url": "./dist/browser/url.js",
+    "bare-http1": "./dist/browser/unsupported/bare-http.js",
+    "bare-https": "./dist/browser/unsupported/bare-http.js",
+    "bare-net": "./dist/browser/unsupported/bare-net.js",
+    "bare-zlib": "./dist/browser/unsupported/bare-zlib.js",
+    "bare-subprocess": "./dist/browser/unsupported/bare-subprocess.js",
+    "bare-cpu-info": "./dist/browser/unsupported/bare-cpu-info.js",
+    "bare-gpu-info": "./dist/browser/unsupported/bare-gpu-info.js",
+    "corestore": "./dist/browser/unsupported/corestore.js",
+    "hyperdrive": "./dist/browser/unsupported/hyperdrive.js",
+    "hyperswarm": "./dist/browser/unsupported/hyperswarm.js",
+    "tar-stream": "./dist/browser/unsupported/tar-stream.js",
+    "@qvac/rag": "./dist/browser/unsupported/rag.js",
+    "@qvac/rag/errors": "./dist/browser/unsupported/rag-errors.js",
+    "@qvac/registry-client": "./dist/browser/unsupported/registry-client.js",
+    "@qvac/langdetect-text": "./dist/browser/unsupported/langdetect-text.js",
+    "@qvac/ggml-rpc-server": "./dist/browser/unsupported/ggml-rpc-server.js",
+    "./dist/handlers/load-model/safe-fetch.js": "./dist/browser/safe-fetch.js",
+    "./dist/runtime/cache-lock.js": "./dist/browser/cache-lock.js",
+    "./dist/resources/native.js": "./dist/browser/resources.js"
   },
   "files": [
     "dist/**/*",
@@ -177,6 +214,7 @@
     "bare": ">=1.32.0"
   },
   "dependencies": {
+    "@noble/hashes": "^2.0.1",
     "@qvac/error": "^0.1.1",
     "@qvac/logging": "^0.1.1",
     "@qvac/rag": "^0.8.1",
@@ -197,32 +235,34 @@
     "bare-stream": "^2.13.3",
     "bare-url": "^2.4.5",
     "bare-zlib": "^1.4.0",
+    "buffer": "^6.0.3",
     "compact-encoding": "^3.3.0",
     "corestore": "^7.11.0",
     "fast-safe-stringify": "2.1.1",
     "hyperdrive": "^13.3.3",
     "hyperswarm": "^4.17.0",
+    "path-browserify": "^1.0.1",
     "semver": "^7.8.5",
     "tar-stream": "^3.2.0",
     "which-runtime": "^1.2.1",
     "zod": "4.6.5"
   },
   "peerDependencies": {
-    "@qvac/asr-ggml": "^0.10.0",
-    "@qvac/audiogen-ggml": "^0.8.0",
-    "@qvac/bci-whispercpp": "^0.13.0",
-    "@qvac/classification-ggml": "^0.32.0",
+    "@qvac/asr-ggml": "^0.11.1",
+    "@qvac/audiogen-ggml": "^0.9.0",
+    "@qvac/bci-whispercpp": "^0.14.0",
+    "@qvac/classification-ggml": "^0.34.0",
     "@qvac/decoder-audio": "^0.8.1",
     "@qvac/diffusion-cpp": "^0.31.0",
-    "@qvac/embed-llamacpp": "^0.52.0",
+    "@qvac/embed-llamacpp": "^0.53.0",
     "@qvac/langdetect-text": "^0.1.2",
-    "@qvac/llm-llamacpp": "^0.64.2",
-    "@qvac/ocr-ggml": "^0.30.0",
-    "@qvac/translation-nmtcpp": "^0.22.0",
-    "@qvac/tts-ggml": "^0.13.0",
-    "@qvac/turbovec-ggml": "^0.2.0",
-    "@qvac/vla-ggml": "^0.33.0",
-    "@qvac/ggml-rpc-server": "^0.6.0"
+    "@qvac/llm-llamacpp": "^0.65.0",
+    "@qvac/ocr-ggml": "^0.31.0",
+    "@qvac/translation-nmtcpp": "^0.23.0",
+    "@qvac/tts-ggml": "^0.14.0",
+    "@qvac/turbovec-ggml": "^0.3.0",
+    "@qvac/vla-ggml": "^0.34.0",
+    "@qvac/ggml-rpc-server": "^0.7.0"
   },
   "peerDependenciesMeta": {
     "@qvac/asr-ggml": {
@@ -272,20 +312,20 @@
     }
   },
   "devDependencies": {
-    "@qvac/asr-ggml": "^0.10.0",
-    "@qvac/audiogen-ggml": "^0.8.0",
-    "@qvac/bci-whispercpp": "^0.13.0",
-    "@qvac/classification-ggml": "^0.32.0",
+    "@qvac/asr-ggml": "^0.11.1",
+    "@qvac/audiogen-ggml": "^0.9.0",
+    "@qvac/bci-whispercpp": "^0.14.0",
+    "@qvac/classification-ggml": "^0.34.0",
     "@qvac/decoder-audio": "^0.8.1",
     "@qvac/diffusion-cpp": "^0.31.0",
-    "@qvac/embed-llamacpp": "^0.52.0",
+    "@qvac/embed-llamacpp": "^0.53.0",
     "@qvac/langdetect-text": "^0.1.2",
-    "@qvac/llm-llamacpp": "^0.64.2",
-    "@qvac/ocr-ggml": "^0.30.0",
-    "@qvac/translation-nmtcpp": "^0.22.0",
-    "@qvac/tts-ggml": "^0.13.0",
-    "@qvac/turbovec-ggml": "^0.2.0",
-    "@qvac/vla-ggml": "^0.33.0",
+    "@qvac/llm-llamacpp": "^0.65.0",
+    "@qvac/ocr-ggml": "^0.31.0",
+    "@qvac/translation-nmtcpp": "^0.23.0",
+    "@qvac/tts-ggml": "^0.14.0",
+    "@qvac/turbovec-ggml": "^0.3.0",
+    "@qvac/vla-ggml": "^0.34.0",
     "@types/brittle": "^3.5.0",
     "bare": "1.34.1 || >=1.35.1",
     "bare-console": "*",
@@ -300,6 +340,6 @@
     "prettier-config-holepunch": "^2.0.0",
     "tsc-alias": "^1.8.17",
     "typescript": "^5.9.3",
-    "@qvac/ggml-rpc-server": "^0.6.0"
+    "@qvac/ggml-rpc-server": "^0.7.0"
   }
 }
