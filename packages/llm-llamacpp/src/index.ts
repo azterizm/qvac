@@ -1552,7 +1552,7 @@ namespace LlmLlamacpp {
      * the prompt, such as a system prompt and tools primed with `prefill`.
      * It is read, never written: the request's own state goes to its
      * `cacheKey`. A file that is missing or shares no prefix with the prompt
-     * is skipped. Text models only.
+     * is skipped.
      */
     baseCacheKey?: string;
     /**
