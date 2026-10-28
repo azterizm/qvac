@@ -26,13 +26,22 @@ function loadUrlOverrideMap() {
   return raw && typeof raw === 'object' ? raw : null
 }
 
+// The tests' Hugging Face models; S3 entries (staged through PRESTAGE_S3_MODELS) and
+// entries CI fetches for other targets, such as cpp:tests, stay off the device.
+function mobileModelNames(manifest) {
+  return Object.entries(manifest.models)
+    .filter(([, e]) => Array.isArray(e.urls) && (!e.targets || e.targets.includes('test:mobile')))
+    .map(([name]) => name)
+}
+
 function modelsFromManifest(manifest) {
   if (!manifest || !manifest.models) {
     throw new Error('[prestage] integration model manifest has no models')
   }
   const overrideMap = loadUrlOverrideMap()
   const models = []
-  for (const [name, entry] of Object.entries(manifest.models)) {
+  for (const name of mobileModelNames(manifest)) {
+    const entry = manifest.models[name]
     const url = entry && Array.isArray(entry.urls) ? entry.urls[0] : null
     const pinnedOk =
       typeof url === 'string' &&
@@ -163,4 +172,10 @@ function main() {
 
 if (require.main === module) main()
 
-module.exports = { modelsFromManifest, modelsFromS3Map, buildScript, IOS_BUNDLE_ID }
+module.exports = {
+  mobileModelNames,
+  modelsFromManifest,
+  modelsFromS3Map,
+  buildScript,
+  IOS_BUNDLE_ID
+}

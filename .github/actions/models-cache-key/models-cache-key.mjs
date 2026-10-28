@@ -34,24 +34,15 @@ export function resolve({
   return { key: `${prefix}${hash}`, prefix, paths, count: entries.length }
 }
 
-// The tests' own manifest merged with ci/models.manifest.json, which holds models only CI stages; either may be absent.
-export function loadManifests(
-  workdir,
-  list = 'test/integration/models.manifest.json,ci/models.manifest.json'
-) {
-  const texts = list
-    .split(',')
-    .map((p) => join(workdir, p.trim()))
-    .filter((f) => existsSync(f))
-    .map((f) => readFileSync(f, 'utf8'))
-  return {
-    text: texts.join('\n'),
-    manifest: { models: Object.assign({}, ...texts.map((t) => JSON.parse(t).models)) }
-  }
+// The package's one model manifest; a package without one has no models.
+export function loadManifest(workdir, path = 'test/integration/models.manifest.json') {
+  const file = join(workdir, path)
+  const text = existsSync(file) ? readFileSync(file, 'utf8') : ''
+  return { text, manifest: { models: text ? JSON.parse(text).models : {} } }
 }
 
 function main(env) {
-  const { text, manifest } = loadManifests(env.WORKDIR, env.MANIFEST || undefined)
+  const { text, manifest } = loadManifest(env.WORKDIR, env.MANIFEST || undefined)
   const r = resolve({
     manifestText: text,
     manifest,

@@ -24,11 +24,15 @@ try {
 sh('npm', ['run', 'generate:benchmark-shards'])
 sh('node', ['scripts/generate-benchmark-shards.js', '--assert-shards'])
 const map = join(TEMP, 'embed-url-map.json')
+const require = createRequire(import.meta.url)
 seedAndPresign({
   pkg: PKG,
   manifest: 'test/integration/models.manifest.json',
   prefix: 'qvac_models_compiled/mobile-pilot/embed/',
-  out: map
+  out: map,
+  names: require('../scripts/generate-prestage-block.js')
+    .mobileModelNames(require('../test/integration/models.manifest.json'))
+    .join(',')
 })
 // The Laya GGUF has no Hugging Face source, so it is presigned from the US bucket on its own.
 sh('bash', ['scripts/generate-laya-presigned-url.sh'], { ...process.env, OUTPUT_DIR: TEMP })
@@ -45,9 +49,7 @@ emitPrestage(PKG, {
 if (process.env.BENCHMARK_ARGS) {
   const suite = dispatch(process.env.BENCHMARK_ARGS.split(/\s+/).filter(Boolean))
   if (suite.name === 'sweep') {
-    const batches = createRequire(import.meta.url)(
-      '../test/integration/_benchmark-matrix.js'
-    ).workflowBatches()
+    const batches = require('../test/integration/_benchmark-matrix.js').workflowBatches()
     const batch =
       batches.find((b) => b.config === suite.values.batch) ??
       (suite.values.batch ? null : batches[0])
