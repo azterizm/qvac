@@ -17,19 +17,11 @@ import { pathToFileURL } from 'node:url'
 
 const SAFE = /^[A-Za-z0-9/_.-]+$/
 
-// setup-cuda exports the MSVC toolset it activates; artifacts built against another STL do not link, so each toolset
-// gets its own cache.
-export function toolsetDir(msvc) {
-  if (!msvc) return ''
-  if (!/^[0-9.]+$/.test(msvc)) throw new Error(`invalid MSVC version: ${msvc}`)
-  return `msvc-${msvc}/`
-}
-
-export function s3Sources({ bucket, platform, arch, msvc }) {
+export function s3Sources({ bucket, platform, arch }) {
   if (!bucket) throw new Error('cache-bucket is required for s3 mode')
   for (const v of [platform, arch])
     if (!SAFE.test(v || '')) throw new Error(`invalid platform/arch: ${v}`)
-  return `clear;x-aws,s3://${bucket}/vcpkg-cache/${platform}-${arch}/${toolsetDir(msvc)},readwrite`
+  return `clear;x-aws,s3://${bucket}/vcpkg-cache/${platform}-${arch}/,readwrite`
 }
 
 export function hostCandidates(env) {
@@ -75,17 +67,13 @@ function main(env) {
   let lines
   if (env.MODE === 's3') {
     lines = [
-      `VCPKG_BINARY_SOURCES=${s3Sources({ bucket: env.CACHE_BUCKET, platform: env.PLATFORM, arch: env.ARCH, msvc: env.QVAC_MSVC_VERSION })}`
+      `VCPKG_BINARY_SOURCES=${s3Sources({ bucket: env.CACHE_BUCKET, platform: env.PLATFORM, arch: env.ARCH })}`
     ]
   } else {
     const cacheDir = cacheDirFor(env.GITHUB_WORKSPACE, env.WORKDIR)
     mkdirSync(cacheDir, { recursive: true })
     const selfHosted = env.RUNNER_ENVIRONMENT !== 'github-hosted'
-    const base = selfHosted ? hostCandidates(env).find(writable) || '' : ''
-    const hostDir =
-      base && toolsetDir(env.QVAC_MSVC_VERSION)
-        ? join(base, toolsetDir(env.QVAC_MSVC_VERSION))
-        : base
+    const hostDir = selfHosted ? hostCandidates(env).find(writable) || '' : ''
     if (selfHosted && !hostDir)
       console.log('::warning::no writable host cache dir; workspace layer only')
     lines = [

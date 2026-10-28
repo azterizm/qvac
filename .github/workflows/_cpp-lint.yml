@@ -53,6 +53,12 @@ jobs:
           aws-region: eu-central-1
       - uses: tetherto/qvac-actions/setup-aws-cli@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
       - uses: ./.github/actions/vcpkg-bootstrap
+      - uses: ./.github/actions/vcpkg-cache-setup
+        with:
+          mode: s3
+          cache-bucket: ${{ secrets.MODEL_S3_BUCKET }}
+          platform: ${{ matrix.row.platform }}
+          arch: ${{ matrix.row.arch }}
       - uses: tetherto/qvac-actions/setup-node@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
           node-version: lts/*
@@ -73,13 +79,6 @@ jobs:
           rocm-version: ${{ matrix.row.toolchain.rocm.version }}
           gfx: ${{ matrix.row.toolchain.rocm.gfx }}
           sha256: ${{ matrix.row.toolchain.rocm.sha256 }}
-      # After setup-cuda, which may switch the MSVC toolset the cache is keyed by.
-      - uses: ./.github/actions/vcpkg-cache-setup
-        with:
-          mode: s3
-          cache-bucket: ${{ secrets.MODEL_S3_BUCKET }}
-          platform: ${{ matrix.row.platform }}
-          arch: ${{ matrix.row.arch }}
       - name: Install
         shell: bash
         working-directory: src
