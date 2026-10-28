@@ -146,10 +146,45 @@ CUDA execution requires the NVIDIA driver and CUDA 13 runtime/cuBLAS
 libraries on the host; the addon itself retains CPU-only load compatibility.
 Windows CUDA remains an explicit source-build option.
 
-Both Linux builds use the shared CI's pinned CUDA 13.0.3 toolkit and ggml's
-non-native architecture list, including `121a-real` for DGX Spark and
-`120a-real` for RTX 5090. These are distinct GPU targets; the host addon must
-also match the CPU architecture.
+The server CUDA build uses CUDA 13.0.3 (nvcc 13.0.88) and the registry's
+explicit architecture list, shared by Linux x64 and ARM64:
+
+```text
+75-virtual;80-virtual;80-real;86-real;89-real;90-virtual;120a-real;121a-real
+```
+
+`virtual` targets carry PTX that the driver compiles on first use; `real`
+targets carry native GPU code. This includes PTX for T4 (7.5), native code for
+A100 (8.0), `120a-real` for RTX 5090, and `121a-real` for DGX Spark. The host
+addon must also match the CPU architecture. This package does not ship a
+separate Jetson CUDA module.
+
+When `QVAC_CUDA_TOOLKIT=13.0.3-server` is set, the registry rejects a different
+nvcc version. `CUDACXX` selects the compiler explicitly, followed by
+`CUDA_PATH`, `/usr/local/cuda`, and `PATH`. Local builds with another toolkit
+version >= 12.9 warn; they are not release builds.
+
+With automatic backend selection, CUDA devices whose code cannot run are
+skipped, allowing Vulkan or ultimately CPU to be selected. Set
+`GGML_DISABLE_CUDA=1` before starting the process to disable CUDA, or use
+`backend: 'vulkan0'` to select Vulkan explicitly. An explicit
+`backend: 'cuda0'` requires that CUDA device and fails if it is unavailable.
+Diffusion's comma-separated `backend` syntax assigns modules (for example,
+`diffusion=cuda0,te=cpu`); it is not an ordered fallback list.
+
+To verify automatic selection on a CUDA-capable host, run these from this
+package directory after building the addon. Each command starts a fresh
+process, generates an SD2 image, and checks the engine's resolved backend:
+
+```sh
+QVAC_EXPECT_BACKEND=CUDA bare test/integration/backend-fallback.js --exit
+GGML_DISABLE_CUDA=1 QVAC_EXPECT_BACKEND=Vulkan bare test/integration/backend-fallback.js --exit
+GGML_DISABLE_CUDA=1 GGML_DISABLE_VULKAN=1 QVAC_EXPECT_BACKEND=CPU bare test/integration/backend-fallback.js --exit
+```
+
+Set `SD_TEST_MODEL_PATH` to an existing SD2 Q8_0 GGUF to avoid downloading it.
+Set `QVAC_TEST_BACKENDS_DIR` to test modules from a separate build, including
+a directory containing only Vulkan or a CUDA module incompatible with the GPU.
 
 ## Downloading Models
 

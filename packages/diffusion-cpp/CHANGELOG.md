@@ -19,6 +19,10 @@
 - Both Linux prebuilds require the CUDA module alongside Vulkan, in PR
   validation and the release artifact build, while retaining the addon's
   independence from GPU runtime libraries.
+- Pin the server CUDA architecture list, including native SM80 code, and
+  validate the CUDA 13.0.3 release compiler in the ggml registry port. Track
+  the toolkit marker in diffusion's vcpkg cache identity and document
+  automatic CUDA-to-Vulkan/CPU fallback and explicit device selection.
 
 ## [0.31.0] - 2026-10-21
 

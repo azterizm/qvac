@@ -2,7 +2,7 @@
   "dependencies": [
     {
       "name": "ggml",
-      "version>=": "2026-08-11#5"
+      "version>=": "2026-08-11#6"
     },
     "picojson",
     {
@@ -15,7 +15,7 @@
     },
     {
       "name": "stable-diffusion-cpp",
-      "version>=": "2026-08-11#9"
+      "version>=": "2026-08-11#10"
     },
     "stb"
   ],
