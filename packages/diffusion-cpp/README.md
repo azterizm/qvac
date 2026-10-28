@@ -873,6 +873,68 @@ A model the engine cannot read resolves to `status: "error"` with `reason: "mode
 
 The projection runs in the calling process and shares its engine state: the GPU backend modules load once per process, so the first `config.backendsDir` any call supplies is the one every later load uses, and the native log callback is process-global like everywhere else.
 
+## Reproducible inference benchmarks
+
+Run a fixed-seed workload with separate warmup and measured iterations:
+
+```sh
+bare scripts/inference-benchmark.js benchmark-spec.json benchmark-output
+```
+
+The output directory must be new. Checkpoint paths and `config.backendsDir` are
+relative to the specification file. For example:
+
+```json
+{
+  "kind": "image",
+  "files": {
+    "model": "models/flux-2-klein-4b-Q8_0.gguf",
+    "llm": "models/Qwen3-4B-Q4_K_M.gguf",
+    "vae": "models/flux2-vae.safetensors"
+  },
+  "config": {
+    "device": "gpu",
+    "diffusion_fa": true,
+    "prediction": "flux2_flow"
+  },
+  "warmupRuns": 1,
+  "runs": 3,
+  "requests": [
+    {
+      "name": "photograph",
+      "params": {
+        "prompt": "A red panda walking on a mossy log in a misty forest.",
+        "width": 1024,
+        "height": 1024,
+        "steps": 10,
+        "cfg_scale": 1,
+        "guidance": 1,
+        "seed": 42
+      }
+    }
+  ]
+}
+```
+
+Use `kind: "video"` with the video model's files and generation parameters.
+Each request needs a distinct name and a fixed non-negative seed. An optional
+`initImagePath` on the request supplies the reference image for image-to-image
+or image-to-video generation.
+
+The runner saves every PNG or AVI and writes `metrics.json` after each iteration.
+Its per-request summary excludes warmup and reports the median, minimum and maximum
+wall latency, first progress latency and first media latency, plus median runtime
+phase timings. Loading is measured separately. First progress can arrive well before
+the generated media; it is not time to first image or video. The report is marked
+`completed` only after generation and unloading succeed.
+
+For an optimization comparison, use identical checkpoint hashes, requests, seeds,
+dimensions, sampling settings and repeat counts. Change one configuration option at
+a time, run both configurations on each target device, and compare the saved media
+as well as latency and peak memory. Phase statistics and cumulative generation
+totals are not substitutes for per-request wall latency. The runner does not score
+image, video or audio quality.
+
 ## Operational Notes
 
 - Native C++ logs are process-global. Configure them once with
