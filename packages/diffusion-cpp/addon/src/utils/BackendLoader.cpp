@@ -17,6 +17,13 @@ namespace qvac_lib_inference_addon_sd {
 namespace {
 
 #ifdef GGML_BACKEND_DL
+// ggml reads the backends dir with fs::u8path, and path::string() is ANSI on
+// Windows (it throws on characters the code page cannot map).
+std::string utf8(const std::filesystem::path& path) {
+  const auto u8 = path.u8string();
+  return {reinterpret_cast<const char*>(u8.data()), u8.size()};
+}
+
 std::string backendDeviceTypeToString(enum ggml_backend_dev_type type) {
   switch (type) {
   case GGML_BACKEND_DEVICE_TYPE_CPU:
@@ -103,7 +110,7 @@ void logBackendModulePathSnapshot(
   QLOG_IF(
       Priority::INFO,
       "Backend module path exists=" + std::string(exists ? "true" : "false") +
-          " path='" + backendsDirPath.string() + "'");
+          " path='" + utf8(backendsDirPath) + "'");
   if (ec) {
     QLOG_IF(
         Priority::WARNING,
@@ -137,7 +144,7 @@ void logBackendModulePathSnapshot(
           "Backend module path iteration error: " + ec.message());
       break;
     }
-    const auto filename = dirEntry.path().filename().string();
+    const auto filename = utf8(dirEntry.path().filename());
     if (filename.rfind(BACKEND_MODULE_PREFIX, 0) == 0 &&
         dirEntry.path().extension() == BACKEND_MODULE_EXTENSION) {
       entries.push_back(filename);
@@ -148,7 +155,7 @@ void logBackendModulePathSnapshot(
     QLOG_IF(
         Priority::WARNING,
         "No qvac diffusion GGML backend modules found under: " +
-            backendsDirPath.string());
+            utf8(backendsDirPath));
     return;
   }
 
@@ -179,9 +186,9 @@ void loadBackendModulesOnce(const std::string& backendsDir) {
     if (!backendsDirPath.empty()) {
       QLOG_IF(
           Priority::INFO,
-          "Loading GPU backends from: " + backendsDirPath.string());
+          "Loading GPU backends from: " + utf8(backendsDirPath));
       logBackendModulePathSnapshot(backendsDirPath);
-      ggml_backend_load_all_from_path(backendsDirPath.string().c_str());
+      ggml_backend_load_all_from_path(utf8(backendsDirPath).c_str());
     } else {
       QLOG_IF(Priority::INFO, "Loading GPU backends from default path");
       ggml_backend_load_all();
