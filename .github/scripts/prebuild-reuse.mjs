@@ -7,9 +7,10 @@ import { createHash } from 'node:crypto'
 import { appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
-// The package's and fabric's native code (fabric is built in every consumer job); package.json names the addon.
+// The package's and fabric's native code (fabric is built in every consumer job); package.json names the addon and
+// project.json holds the build commands and per-configuration settings.
 export const NATIVE =
-  /\.(c|cc|cpp|cxx|h|hh|hpp|hxx|inl|ipp|cu|cuh|m|mm|S|asm)$|(^|\/)CMakeLists\.txt$|\.cmake$|(^|\/)vcpkg(-configuration)?\.json$|\/vcpkg\/|(^|\/)package\.json$/
+  /\.(c|cc|cpp|cxx|h|hh|hpp|hxx|inl|ipp|cu|cuh|m|mm|S|asm)$|(^|\/)CMakeLists\.txt$|\.cmake$|(^|\/)vcpkg(-configuration)?\.json$|\/vcpkg\/|(^|\/)(package|project)\.json$/
 
 // Build inputs, every file: shared CMake and vcpkg code, toolchain pins, lockfile and install layout, and the CI code.
 export const INPUTS = [
@@ -51,14 +52,20 @@ export function pick(artifacts, branch) {
   )
 }
 
+// Rows come in as index-aligned slug, config, dir and runner lists: whole rows overflow one environment variable.
+export function legs({ slugs, configs, dirs, runners }) {
+  return slugs.map((slug, i) => ({ slug, config: configs[i], dir: dirs[i], runner: runners[i] }))
+}
+
+// Legs to build go back as their row index, which _build reads the full row by.
 export async function plan(rows, { tree, list, branch }) {
   const build = []
   const reused = []
-  for (const row of rows) {
+  for (const [i, row] of rows.entries()) {
     const name = cacheName(row, legKey(row, tree))
     const hit = branch ? pick(await list(name), branch) : null
     if (hit) reused.push({ slug: row.slug, config: row.config, name, runId: hit.workflow_run.id })
-    else build.push({ ...row, cacheName: name })
+    else build.push({ i, cacheName: name })
   }
   return { build, reused }
 }
@@ -81,7 +88,13 @@ async function main(env) {
     return (await res.json()).artifacts ?? []
   }
   const branch = env.REUSE === 'true' ? env.BRANCH : ''
-  const { build, reused } = await plan(JSON.parse(env.ROWS), { tree, list, branch })
+  const rows = legs({
+    slugs: JSON.parse(env.SLUGS),
+    configs: JSON.parse(env.CONFIGS),
+    dirs: JSON.parse(env.DIRS),
+    runners: JSON.parse(env.RUNNERS)
+  })
+  const { build, reused } = await plan(rows, { tree, list, branch })
   for (const r of reused) console.log(`reuse ${r.slug} ${r.config} from run ${r.runId}`)
   console.log(`${build.length} to build, ${reused.length} reused`)
   appendFileSync(

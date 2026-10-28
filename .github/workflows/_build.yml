@@ -42,7 +42,10 @@ jobs:
       - id: plan
         shell: bash
         env:
-          ROWS: ${{ inputs.rows }}
+          SLUGS: ${{ toJSON(fromJSON(inputs.rows).*.slug) }}
+          CONFIGS: ${{ toJSON(fromJSON(inputs.rows).*.config) }}
+          DIRS: ${{ toJSON(fromJSON(inputs.rows).*.dir) }}
+          RUNNERS: ${{ toJSON(fromJSON(inputs.rows).*.runner) }}
           SRC: src
           REUSE: ${{ inputs.reuse && (github.event.pull_request.head.repo.full_name || github.repository) == github.repository }}
           BRANCH: ${{ github.head_ref || github.ref_name }}
@@ -52,8 +55,8 @@ jobs:
   build:
     needs: plan
     if: needs.plan.outputs.build != '[]'
-    name: ${{ matrix.row.slug }} ${{ matrix.row.config }}
-    runs-on: ${{ matrix.row.runner }}
+    name: ${{ fromJSON(inputs.rows)[matrix.leg.i].slug }} ${{ fromJSON(inputs.rows)[matrix.leg.i].config }}
+    runs-on: ${{ fromJSON(inputs.rows)[matrix.leg.i].runner }}
     environment: release
     timeout-minutes: 180
     permissions:
@@ -63,9 +66,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        row: ${{ fromJSON(needs.plan.outputs.build) }}
+        leg: ${{ fromJSON(needs.plan.outputs.build) }}
     env:
-      WORKDIR: src/${{ matrix.row.dir }}
+      WORKDIR: src/${{ fromJSON(inputs.rows)[matrix.leg.i].dir }}
       NX_DAEMON: "false"
       NX_NO_CLOUD: "true"
     steps:
@@ -86,22 +89,22 @@ jobs:
       - if: runner.environment == 'github-hosted'
         uses: tetherto/qvac-actions/runner-free-disk@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
-          keep-android: ${{ matrix.row.platform == 'android' }}
+          keep-android: ${{ fromJSON(inputs.rows)[matrix.leg.i].platform == 'android' }}
       # Toolchain versions are the workspace's, from nx.json; a package's own system packages come from its ci:system target.
-      - if: runner.environment == 'github-hosted' && matrix.row.platform == 'android'
+      - if: runner.environment == 'github-hosted' && fromJSON(inputs.rows)[matrix.leg.i].platform == 'android'
         uses: tetherto/qvac-actions/runner-apt-install@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
-          packages: ${{ matrix.row.meta.toolchain.android.aptPackages }}
-      - if: runner.environment == 'github-hosted' && matrix.row.platform == 'android'
+          packages: ${{ fromJSON(inputs.rows)[matrix.leg.i].meta.toolchain.android.aptPackages }}
+      - if: runner.environment == 'github-hosted' && fromJSON(inputs.rows)[matrix.leg.i].platform == 'android'
         uses: tetherto/qvac-actions/setup-android-ndk@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
-          ndk-version: ${{ matrix.row.meta.toolchain.android.ndk }}
-          api-level: ${{ matrix.row.meta.toolchain.android.apiLevel }}
+          ndk-version: ${{ fromJSON(inputs.rows)[matrix.leg.i].meta.toolchain.android.ndk }}
+          api-level: ${{ fromJSON(inputs.rows)[matrix.leg.i].meta.toolchain.android.apiLevel }}
       - if: runner.environment == 'github-hosted'
         uses: tetherto/qvac-actions/setup-clang@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
-          version: ${{ matrix.row.meta.toolchain.llvm.linux }}
-          windows-version: ${{ matrix.row.meta.toolchain.llvm.windows }}
+          version: ${{ fromJSON(inputs.rows)[matrix.leg.i].meta.toolchain.llvm.linux }}
+          windows-version: ${{ fromJSON(inputs.rows)[matrix.leg.i].meta.toolchain.llvm.windows }}
       - uses: tetherto/qvac-actions/configure-aws-credentials@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
@@ -112,11 +115,11 @@ jobs:
         with:
           mode: s3
           cache-bucket: ${{ secrets.MODEL_S3_BUCKET }}
-          platform: ${{ matrix.row.platform }}
-          arch: ${{ matrix.row.arch }}
+          platform: ${{ fromJSON(inputs.rows)[matrix.leg.i].platform }}
+          arch: ${{ fromJSON(inputs.rows)[matrix.leg.i].arch }}
       - uses: ./.github/actions/setup-windows-host
         with:
-          arch: ${{ matrix.row.arch }}
+          arch: ${{ fromJSON(inputs.rows)[matrix.leg.i].arch }}
       - uses: tetherto/qvac-actions/setup-node@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
           node-version: lts/*
@@ -137,45 +140,45 @@ jobs:
           BUCKET: ${{ secrets.MODEL_S3_BUCKET }}
         run: aws s3 cp "$ARCHIVE" "s3://$BUCKET/$KEY"
       # The build compiles its native dependencies here, so it takes the host's toolkits plus any the configuration asks for.
-      - if: contains(matrix.row.toolchain.hostSetup[format('{0}-{1}', matrix.row.platform, matrix.row.arch)], 'cuda') || contains(matrix.row.setup, 'cuda')
+      - if: contains(fromJSON(inputs.rows)[matrix.leg.i].toolchain.hostSetup[format('{0}-{1}', fromJSON(inputs.rows)[matrix.leg.i].platform, fromJSON(inputs.rows)[matrix.leg.i].arch)], 'cuda') || contains(fromJSON(inputs.rows)[matrix.leg.i].setup, 'cuda')
         uses: ./.github/actions/setup-cuda
         with:
-          cuda-version: ${{ matrix.row.toolchain.cuda }}
+          cuda-version: ${{ fromJSON(inputs.rows)[matrix.leg.i].toolchain.cuda }}
           # Only fabric's CUDA build loads MSVC 14.44; the package builds with the runner's default toolset, as on main.
           msvc-scope: file
-      - if: contains(matrix.row.toolchain.hostSetup[format('{0}-{1}', matrix.row.platform, matrix.row.arch)], 'rocm') || contains(matrix.row.setup, 'rocm')
+      - if: contains(fromJSON(inputs.rows)[matrix.leg.i].toolchain.hostSetup[format('{0}-{1}', fromJSON(inputs.rows)[matrix.leg.i].platform, fromJSON(inputs.rows)[matrix.leg.i].arch)], 'rocm') || contains(fromJSON(inputs.rows)[matrix.leg.i].setup, 'rocm')
         uses: ./.github/actions/setup-rocm
         with:
-          rocm-version: ${{ matrix.row.toolchain.rocm.version }}
-          gfx: ${{ matrix.row.toolchain.rocm.gfx }}
-          sha256: ${{ matrix.row.toolchain.rocm.sha256 }}
+          rocm-version: ${{ fromJSON(inputs.rows)[matrix.leg.i].toolchain.rocm.version }}
+          gfx: ${{ fromJSON(inputs.rows)[matrix.leg.i].toolchain.rocm.gfx }}
+          sha256: ${{ fromJSON(inputs.rows)[matrix.leg.i].toolchain.rocm.sha256 }}
       # The package and its workspace dependencies, so Nx builds a dependency the change touched from its sources.
       - name: Install
         shell: bash
         working-directory: src
         env:
-          NPM: ${{ matrix.row.npm }}
+          NPM: ${{ fromJSON(inputs.rows)[matrix.leg.i].npm }}
         run: pnpm install --frozen-lockfile --filter . --filter "$NPM..."
       - name: Build
         shell: bash
         working-directory: src
         env:
-          PROJECT: ${{ matrix.row.project }}
-          CONFIG: ${{ matrix.row.config }}
+          PROJECT: ${{ fromJSON(inputs.rows)[matrix.leg.i].project }}
+          CONFIG: ${{ fromJSON(inputs.rows)[matrix.leg.i].config }}
         run: pnpm exec nx run-many -t ci:system,build -p "$PROJECT" -c "$CONFIG" --parallel=1 --outputStyle=stream
       - if: failure()
         shell: bash
         run: for f in "$VCPKG_ROOT"/buildtrees/*/{config,install,build}-*.log; do [ -f "$f" ] && { echo "== $f"; tail -200 "$f"; }; done; true
       - uses: ./.github/actions/prebuilds-strip
         with:
-          platform: ${{ matrix.row.platform }}
+          platform: ${{ fromJSON(inputs.rows)[matrix.leg.i].platform }}
           workdir: ${{ env.WORKDIR }}
       - uses: ./.github/actions/prebuilds-check-exports
         with:
-          platform: ${{ matrix.row.platform }}
+          platform: ${{ fromJSON(inputs.rows)[matrix.leg.i].platform }}
           workdir: ${{ env.WORKDIR }}
-          provider: ${{ matrix.row.provider }}
-      - if: matrix.row.platform == 'win32'
+          provider: ${{ fromJSON(inputs.rows)[matrix.leg.i].provider }}
+      - if: fromJSON(inputs.rows)[matrix.leg.i].platform == 'win32'
         uses: ./.github/actions/prebuilds-check-windows-runtime
         with:
           workdir: ${{ env.WORKDIR }}
@@ -183,14 +186,14 @@ jobs:
       # that root when only one package built. Consumers take the <dir>/prebuilds they need.
       - uses: tetherto/qvac-actions/upload-artifact@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
-          name: prebuild-${{ matrix.row.slug }}-${{ matrix.row.config }}
+          name: prebuild-${{ fromJSON(inputs.rows)[matrix.leg.i].slug }}-${{ fromJSON(inputs.rows)[matrix.leg.i].config }}
           path: |
             src/package.json
             src/packages/*/prebuilds
       # The same files under the leg's key, for a later run on this branch to reuse.
       - uses: tetherto/qvac-actions/upload-artifact@daeff4f86f799ed3a22e7ef01a3ed75553474940  # TEMP rehearsal: qvac-actions PR 18 head until it merges
         with:
-          name: ${{ matrix.row.cacheName }}
+          name: ${{ matrix.leg.cacheName }}
           retention-days: "14"
           path: |
             src/package.json
