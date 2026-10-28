@@ -3,7 +3,7 @@
 Runs the SDK in a web page: load a GGUF model over HTTPS, chat with streaming
 output, stop a generation, and inspect the engine's logs and stats. Requests run
 in a Dedicated Worker on `@qvac/inference`, and the LLM addon runs as
-WebAssembly on WebGPU. See [docs/browser.md](../../docs/browser.md).
+WebAssembly on WebGPU. See the [browser guide](../../../../docs/website/content/_unpublished/sdk/browser.mdx).
 
 From `packages/sdk`, after `npm run build` (and `npm run build:web` in
 `packages/llm-llamacpp` when running from a source checkout):
