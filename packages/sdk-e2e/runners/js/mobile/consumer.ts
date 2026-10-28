@@ -1,4 +1,5 @@
 import { DecisionExecutor } from '../shared/executors/decision-executor.js'
+import { RerankExecutor } from '../shared/executors/rerank-executor.js'
 import { MobileSpeakerAwareExecutor } from './executors/speaker-aware-executor.js'
 import { RpcServerExecutor } from '../shared/executors/rpc-server-executor.js'
 import { Platform } from 'react-native'
@@ -17,6 +18,7 @@ import { DeferredToolsExecutor } from '../shared/executors/deferred-tools-execut
 import { TranslationExecutor } from '../shared/executors/translation-executor.js'
 import { ShardedModelExecutor } from '../shared/executors/sharded-model-executor.js'
 import { HttpEmbeddingExecutor } from '../shared/executors/http-embedding-executor.js'
+import { SpeculativeDecodingExecutor } from '../shared/executors/speculative-decoding-executor.js'
 import { KvCacheExecutor } from '../shared/executors/kv-cache-executor.js'
 import { MobileLoggingExecutor } from './executors/logging-executor.js'
 import { RegistryExecutor } from '../shared/executors/registry-executor.js'
@@ -219,6 +221,7 @@ export const executor = createExecutor({
     new MobileTranscribeStreamEventsExecutor(resources),
     new EmbeddingExecutor(resources),
     new DecisionExecutor(resources),
+    new RerankExecutor(resources),
     new MobileRagExecutor(resources),
     new VectorIndexExecutor(resources),
     new ModelInfoExecutor(resources),
@@ -237,6 +240,7 @@ export const executor = createExecutor({
     new MobileLoggingExecutor(resources),
     new RegistryExecutor(resources),
     new HttpEmbeddingExecutor(resources),
+    new SpeculativeDecodingExecutor(resources),
     new KvCacheExecutor(resources),
     new MobileParakeetStreamExecutor(resources),
     new MobileParakeetExecutor(resources),
