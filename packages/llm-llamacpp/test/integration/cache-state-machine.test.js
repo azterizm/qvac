@@ -447,6 +447,41 @@ safeTest('Switching cacheKey keeps each conversation', { timeout: 600_000 }, asy
   assertFollowUpReusesCache(t, { CacheTokens: firstCacheInitial }, backToFirstStats)
 })
 
+safeTest(
+  'baseCacheKey starts a new conversation from a primed file',
+  { timeout: 600_000 },
+  async (t) => {
+    const primer = await setupModel(t, { n_predict: '256', ctx_size: '4096' })
+    const base = path.join(primer.dirPath, 'cache-base-primed.bin')
+    const session = path.join(primer.dirPath, 'cache-base-session.bin')
+    cleanupIntegrationCacheFiles(base)
+    t.teardown(() => cleanupIntegrationCacheFiles(base))
+    await runAndCollectStats(primer.model, buildPrompt(), cacheOpts(base, { prefill: true }))
+    await primer.model.saveCache(base)
+    await primer.model.unload()
+    t.ok(fs.existsSync(base), 'the primed file was written')
+    const primedBytes = fs.readFileSync(base)
+
+    const { model } = await setupModel(t, { n_predict: '256', ctx_size: '4096' })
+    const stats = await runAndCollectStats(
+      model,
+      buildPrompt(),
+      cacheOpts(session, { baseCacheKey: base })
+    )
+    t.ok(
+      reusedTokens(stats) > 0,
+      `the new conversation reused ${reusedTokens(stats)} tokens of its baseCacheKey`
+    )
+    t.ok(fs.readFileSync(base).equals(primedBytes), 'the base file is unchanged')
+    // TypeError is a native error, which plain t.exception rethrows.
+    await t.exception.all(
+      model.run(buildPrompt(), { baseCacheKey: 42 }),
+      /baseCacheKey must be a string/,
+      'a non-string baseCacheKey is refused'
+    )
+  }
+)
+
 safeTest('Single-shot inferences reuse the prefix they share', { timeout: 600_000 }, async (t) => {
   const { model } = await setupModel(t, { n_predict: '256', ctx_size: '4096' })
 

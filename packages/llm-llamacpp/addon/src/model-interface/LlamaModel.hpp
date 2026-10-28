@@ -113,6 +113,10 @@ public:
     /// or unloading the model drops it instead of writing its `cacheKey`
     /// file. Only an explicit `saveCache` writes it.
     bool ephemeral = false;
+    /// A `cacheKey` file the request may start from, read and never written:
+    /// it competes with the states in memory, and the one that serves the
+    /// longest prefix of the prompt wins. Text models only.
+    std::string baseCacheKey;
   };
 
   std::any process(const std::any& input) final;

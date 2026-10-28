@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- `baseCacheKey` run option: a `cacheKey` file a request starts from when
+  nothing in memory serves more of its prompt, such as a primed system prompt
+  shared by many conversations. The file is read, never written.
+
 ### Changed
 
 - A text request reuses the longest prompt prefix it shares with any

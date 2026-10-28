@@ -44,6 +44,7 @@ interface NormalizedRunOptions {
   generationParams: GenerationParams | undefined;
   cacheKey: string | undefined;
   ephemeral: boolean;
+  baseCacheKey: string | undefined;
   rejectWhenBusy: boolean | undefined;
 }
 
@@ -70,6 +71,7 @@ function normalizeRunOptions(runOptions: unknown): NormalizedRunOptions {
       generationParams: undefined,
       cacheKey: undefined,
       ephemeral: false,
+      baseCacheKey: undefined,
       rejectWhenBusy: undefined,
     };
   }
@@ -109,6 +111,10 @@ function normalizeRunOptions(runOptions: unknown): NormalizedRunOptions {
     throw new TypeError("ephemeral must be a boolean when provided");
   }
 
+  if (options.baseCacheKey !== undefined && typeof options.baseCacheKey !== "string") {
+    throw new TypeError("baseCacheKey must be a string when provided");
+  }
+
   if (options.rejectWhenBusy !== undefined && typeof options.rejectWhenBusy !== "boolean") {
     throw new TypeError("rejectWhenBusy must be a boolean when provided");
   }
@@ -118,6 +124,7 @@ function normalizeRunOptions(runOptions: unknown): NormalizedRunOptions {
     generationParams: normalizeGenerationParams(options.generationParams),
     cacheKey: options.cacheKey,
     ephemeral: options.ephemeral === true,
+    baseCacheKey: options.baseCacheKey,
     // Left undefined when unset so admission falls back to the instance default.
     rejectWhenBusy: options.rejectWhenBusy,
   };
@@ -131,7 +138,8 @@ function promptToAddonMessages(
     throw new TypeError("Prompt input must be Message[]");
   }
 
-  const { prefill, generationParams, cacheKey, ephemeral } = normalizeRunOptions(runOptions);
+  const { prefill, generationParams, cacheKey, ephemeral, baseCacheKey } =
+    normalizeRunOptions(runOptions);
 
   const textMessages: Message[] = [];
   const mediaItems: Uint8Array[] = [];
@@ -159,6 +167,7 @@ function promptToAddonMessages(
     generationParams,
     cacheKey,
     ephemeral,
+    baseCacheKey,
   });
 
   return promptMessages;
@@ -1538,6 +1547,14 @@ namespace LlmLlamacpp {
      * The flag belongs to the conversation's latest request.
      */
     ephemeral?: boolean;
+    /**
+     * A `cacheKey` file to start from when nothing in memory serves more of
+     * the prompt, such as a system prompt and tools primed with `prefill`.
+     * It is read, never written: the request's own state goes to its
+     * `cacheKey`. A file that is missing or shares no prefix with the prompt
+     * is skipped. Text models only.
+     */
+    baseCacheKey?: string;
     /**
      * Admission policy when the worker pool is full. `true` rejects before
      * submitting with an `Error` carrying `code === 'RUN_BUSY'` — branch on the

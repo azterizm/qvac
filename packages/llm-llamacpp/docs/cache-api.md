@@ -17,7 +17,7 @@ async function collectOutput(response) {
 }
 ```
 
-For a batch (`model.run([...])`) there is no top-level second argument — set cache options **per prompt** in `BatchPrompt.runOptions` (`cacheKey`, `ephemeral`, `prefill`, `generationParams`). Passing a second argument to a batch `run()` throws.
+For a batch (`model.run([...])`) there is no top-level second argument — set cache options **per prompt** in `BatchPrompt.runOptions` (`cacheKey`, `ephemeral`, `baseCacheKey`, `prefill`, `generationParams`). Passing a second argument to a batch `run()` throws.
 
 ```js
 // Batch: cache options go per item, not as a second run() argument.
@@ -45,6 +45,7 @@ conversation](./cache-lifecycle.md#starting-from-another-conversation).
 | --- | --- | --- |
 | `cacheKey` | `string` | Path to the cache file. Omit to disable caching. The conversation stays in memory and is written to this file only by `saveCache()` or when it would otherwise be lost (see [Save the cache to disk](#save-the-cache-to-disk)). |
 | `ephemeral` | `boolean` | `true` keeps the conversation in memory only: whenever it would be written automatically, it is dropped instead. `saveCache()` still writes it. Default `false`. |
+| `baseCacheKey` | `string` | A `cacheKey` file to start from when nothing in memory serves more of the prompt, such as a primed system prompt. Read, never written; skipped when missing or when it shares no prefix with the prompt. Text models only. See [Start from a primed file](#start-from-a-primed-file). |
 | `prefill` | `boolean` | Evaluate prompt without generating a response. On a model loaded with `parallel >= 2`, needs a `cacheKey` — see below. |
 | `generationParams` | `object` | Per-run overrides for temp, top_p, top_k, predict, seed, penalties. |
 
@@ -536,9 +537,25 @@ every possible custom template or user message.
 
 The next turn on the same `cacheKey` continues that conversation, and the file
 written for it afterwards holds the whole conversation, not the primed prefix.
-To start several conversations from one primed prefix, copy the saved file to a
-new `cacheKey` per conversation before its first request, or keep the
-conversations `ephemeral` so the primed file is never overwritten.
+
+### Start from a primed file
+
+To start several conversations from one primed prefix, give each its own
+`cacheKey` and name the primed file as `baseCacheKey`:
+
+```js
+await model.run(systemAndTools, { cacheKey: 'primed.bin', prefill: true })
+await model.saveCache('primed.bin')
+
+// Later, possibly in another process:
+await model.run(history, { cacheKey: 'chat-42.bin', baseCacheKey: 'primed.bin' })
+```
+
+The request starts from a copy of `primed.bin` unless a state in memory serves
+more of its prompt, and decodes only what follows. `primed.bin` is never
+written; the conversation goes to `chat-42.bin`. The file must come from a
+model loaded with the same `parallel`: llama.cpp loads a state file only into
+a context with as many KV streams as the one that wrote it.
 
 > Migration note: this addon contract is intentionally incompatible with SDK
 > versions that still send delta messages/tools or expose

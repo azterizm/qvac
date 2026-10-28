@@ -555,6 +555,14 @@ declare namespace LlmLlamacpp {
          */
         ephemeral?: boolean;
         /**
+         * A `cacheKey` file to start from when nothing in memory serves more of
+         * the prompt, such as a system prompt and tools primed with `prefill`.
+         * It is read, never written: the request's own state goes to its
+         * `cacheKey`. A file that is missing or shares no prefix with the prompt
+         * is skipped. Text models only.
+         */
+        baseCacheKey?: string;
+        /**
          * Admission policy when the worker pool is full. `true` rejects before
          * submitting with an `Error` carrying `code === 'RUN_BUSY'` — branch on the
          * code, not the message. `false` submits to the native multi-job

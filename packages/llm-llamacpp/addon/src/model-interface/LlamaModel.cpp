@@ -1238,6 +1238,10 @@ LlamaModel::resolveChatAndTools(const Prompt& prompt) {
         }
       };
   if (state_->cacheManager_.has_value()) {
+    // The base key's file is a source like any file this model has used.
+    if (state_->fileIndex_) {
+      state_->fileIndex_->note(prompt.baseCacheKey);
+    }
     ParsedPromptPayload parsedPrompt;
     resolved.isCacheLoaded = state_->cacheManager_->handleCache(
         parsedPrompt,
@@ -1670,6 +1674,9 @@ batching::BatchResult LlamaModel::processPromptBatchImpl(
     sr.prefill = prompt.prefill;
     sr.cacheKey = prompt.cacheKey;
     sr.ephemeral = prompt.ephemeral;
+    if (state_->fileIndex_) {
+      state_->fileIndex_->note(prompt.baseCacheKey);
+    }
     sr.overrides = prompt.generationParams;
     // `seen` fires the seq observer exactly once per slot: at admission
     // (onAdmitted), with onToken/onDone as a fallback latch. Only the

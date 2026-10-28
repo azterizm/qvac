@@ -2683,11 +2683,12 @@ public:
 
   BatchedTurn
   run(const std::string& input, const std::string& cacheKey,
-      bool saveAfter = false) {
+      bool saveAfter = false, const std::string& baseKey = "") {
     BatchedTurn turn;
     LlamaModel::Prompt prompt;
     prompt.input = input;
     prompt.cacheKey = cacheKey;
+    prompt.baseCacheKey = baseKey;
     bool read = false;
     prompt.outputCallback = [&](const std::string&) {
       if (!read && driver_ != nullptr) {
@@ -2922,11 +2923,13 @@ struct SingleTurn {
   size_t reuse = 0;
 };
 
-SingleTurn
-runSingle(LlamaModel& model, const std::string& input, const std::string& key) {
+SingleTurn runSingle(
+    LlamaModel& model, const std::string& input, const std::string& key,
+    const std::string& baseKey = "") {
   LlamaModel::Prompt prompt;
   prompt.input = input;
   prompt.cacheKey = key;
+  prompt.baseCacheKey = baseKey;
   SingleTurn turn;
   turn.output = model.processPrompt(prompt);
   if (auto* text = dynamic_cast<TextLlmContext*>(
@@ -3844,6 +3847,86 @@ TEST(CrossKeyPrefixTest, AFileLendsAConversationAndStaysAsItWas) {
     fs::remove(key);
   }
   fs::remove("cross_file_d.bin");
+}
+
+// A `baseCacheKey` file this process never used serves a new conversation
+// that shares its prefix, and is read, not changed. Without it the same
+// request starts cold.
+TEST(CrossKeyPrefixTest, ABaseCacheKeyServesANewConversation) {
+  if (!fs::exists(test_common::BaseTestModelPath::get())) {
+    GTEST_SKIP() << "base test model not found";
+  }
+  const std::vector<std::string> keys = {
+      "cross_base_primed.bin", "cross_base_d.bin"};
+  for (const auto& key : keys) {
+    fs::remove(key);
+  }
+  {
+    auto primer = loadSinglePromptModel(nullptr);
+    ASSERT_TRUE(primer->isLoaded());
+    runSingle(*primer, fruitQuestion("apple"), keys[0]);
+    primer->saveCache(keys[0]);
+  }
+  ASSERT_TRUE(fs::exists(keys[0]));
+  const std::string base = bytesOf(keys[0]);
+
+  auto model = loadSinglePromptModel(nullptr);
+  ASSERT_TRUE(model->isLoaded());
+  EXPECT_LT(
+      runSingle(*model, fruitQuestion("date"), "").reuse, K_SHARED_RULES_TOKENS)
+      << "test setup: the file is not a source without baseCacheKey";
+  runSingle(*model, unrelatedQuestion(), "");
+
+  const SingleTurn cherry =
+      runSingle(*model, fruitQuestion("cherry"), keys[1], keys[0]);
+  EXPECT_EQ(textContext(*model).donorAdoptionsForTesting(), 1u);
+  EXPECT_GT(cherry.reuse, K_SHARED_RULES_TOKENS)
+      << "the request did not start from its baseCacheKey";
+  EXPECT_TRUE(mentions(cherry.output, "cherry")) << cherry.output;
+  EXPECT_EQ(bytesOf(keys[0]), base);
+  model->saveCache(keys[1]);
+  EXPECT_TRUE(fs::exists(keys[1]));
+  EXPECT_EQ(bytesOf(keys[0]), base) << "the base file was written";
+  model.reset();
+  for (const auto& key : keys) {
+    fs::remove(key);
+  }
+}
+
+// On the batch path, `baseCacheKey` serves a request from a file this
+// process never used. The file comes from a batched model too: a state file
+// loads only into a context with as many KV streams as the one that wrote it.
+TEST(CrossKeyPrefixTest, BatchBaseCacheKeyServesANewConversation) {
+  if (!fs::exists(test_common::BaseTestModelPath::get())) {
+    GTEST_SKIP() << "base test model not found";
+  }
+  const std::vector<std::string> keys = {
+      "cross_batch_base_primed.bin", "cross_batch_base_b.bin"};
+  for (const auto& key : keys) {
+    fs::remove(key);
+  }
+  {
+    auto primer = loadBatchedModel();
+    ASSERT_TRUE(primer->isLoaded());
+    BatchedCacheHarness(*primer).run(fruitQuestion("apple"), keys[0], true);
+  }
+  ASSERT_TRUE(fs::exists(keys[0]));
+  const std::string base = bytesOf(keys[0]);
+
+  auto model = loadBatchedModel();
+  ASSERT_TRUE(model->isLoaded());
+  BatchedCacheHarness harness(*model);
+  const BatchedTurn banana =
+      harness.run(fruitQuestion("banana"), keys[1], false, keys[0]);
+  EXPECT_EQ(harness.scheduler().donorHitsForTesting(), 1u);
+  EXPECT_GT(banana.reuse, K_SHARED_RULES_TOKENS)
+      << "the request did not start from its baseCacheKey";
+  EXPECT_TRUE(mentions(banana.output, "banana")) << banana.output;
+  model.reset();
+  EXPECT_EQ(bytesOf(keys[0]), base);
+  for (const auto& key : keys) {
+    fs::remove(key);
+  }
 }
 
 // A batch call wipes the memory the single-prompt context kept in place, even
