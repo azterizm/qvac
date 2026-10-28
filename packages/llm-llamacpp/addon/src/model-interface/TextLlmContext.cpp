@@ -716,16 +716,18 @@ PrefillPlan TextLlmContext::preparePrefill(
 
   std::optional<size_t> checkpointAt;
   if (cacheReconciliationEnabled_) {
-    if (cacheSourceProvider_ && sharesCacheAcrossKeys()) {
-      adoptBestCacheSource(cache::fromTokens(inputTokens));
-    }
     const size_t fullSize = inputTokens.size();
     // Reconciliation trims or replaces the cached conversation, so a prompt
     // that cannot fit is refused before it, against the prefix it shares
-    // with the cache. A text ledger has one position per entry.
+    // with the cache. A text ledger has one position per entry. Whatever
+    // the cache shares, the prompt fits or not as a whole, so a refused
+    // prompt is refused before another conversation's state is copied in.
     const size_t shared =
         cache::commonPrefix(residentLedger_, cache::fromTokens(inputTokens));
     throwIfOverflows(static_cast<llama_pos>(shared), fullSize - shared);
+    if (cacheSourceProvider_ && sharesCacheAcrossKeys()) {
+      adoptBestCacheSource(cache::fromTokens(inputTokens));
+    }
     beginCacheRequest();
     inputTokens = reconcilePrompt(inputTokens, isPrefillOnlyRequest);
     // Only the generation prompt follows the history, so the history ends

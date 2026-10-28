@@ -4159,3 +4159,44 @@ TEST(CrossKeyPrefixTest, BatchEvictsAnonymousStatesFirst) {
     fs::remove(key);
   }
 }
+
+// A prompt too long for the context is refused before another
+// conversation's state is copied in, so the key keeps its own.
+TEST(CrossKeyPrefixTest, ARefusedPromptKeepsTheKeysOwnState) {
+  if (!fs::exists(test_common::BaseTestModelPath::get())) {
+    GTEST_SKIP() << "base test model not found";
+  }
+  const std::vector<std::string> keys = {
+      "cross_refused_a.bin", "cross_refused_b.bin"};
+  for (const auto& key : keys) {
+    fs::remove(key);
+  }
+  auto model = loadSinglePromptModel(nullptr);
+  ASSERT_TRUE(model->isLoaded());
+  const SingleTurn apple = runSingle(*model, fruitQuestion("apple"), keys[0]);
+  const auto continuing = [&apple](const std::string& last) {
+    return chatInput(
+        {{"system", fruitStallRules()},
+         {"user", "Say one word: apple."},
+         {"assistant", apple.output},
+         {"user", last}});
+  };
+  // The second key continues the first, so it serves more of the long
+  // prompt below than the first key's own state does.
+  runSingle(*model, continuing("Say one word: banana."), keys[1]);
+
+  std::string tooLong = "Say one word: banana.";
+  for (int i = 0; i < 3000; ++i) {
+    tooLong += " filler";
+  }
+  EXPECT_ANY_THROW(runSingle(*model, continuing(tooLong), keys[0]));
+  EXPECT_EQ(textContext(*model).donorAdoptionsForTesting(), 0u)
+      << "the refused prompt replaced the key's state with another one";
+
+  const SingleTurn again = runSingle(*model, continuing("Again."), keys[0]);
+  EXPECT_GT(again.reuse, K_SHARED_RULES_TOKENS);
+  model.reset();
+  for (const auto& key : keys) {
+    fs::remove(key);
+  }
+}
