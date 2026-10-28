@@ -1048,8 +1048,11 @@ test(
 // stands in for that here: the first two cameras must run, 0 and
 // numCameras+1 must be rejected before any native call. When
 // PI05_TEST_ACTIONS_2CAM points at a safetensors file holding
-// `ode.actions_final` from the PyTorch oracle with the third camera masked,
-// the two-camera actions are also held to the CPU parity bar.
+// `ode.actions_final` from the float32 PyTorch oracle with the third camera
+// masked (README-oracle.md), the two-camera actions are also checked for
+// parity. The two-camera ODE amplifies weight rounding, so the bar depends on
+// the GGUF: measured f16 0.9998, q_aggressive 0.991. 0.98 still catches a
+// wrong camera layout: two-camera vs three-camera actions are at 0.934.
 test(
   'pi05 integration: accepts fewer images than numCameras (needs GGUF)',
   { timeout: 1200000, skip: _skipMobilePi05 },
@@ -1121,7 +1124,9 @@ test(
         t.is(expected.length, actions.length, 'two-camera oracle length')
         const cos = cosineSim(actions, expected)
         t.comment(`two-camera cos vs PyTorch (third camera masked): ${cos.toFixed(6)}`)
-        t.ok(cos > 0.999, `two-camera cos ${cos.toFixed(6)} > 0.999 (cpu bar)`)
+        const quant = _quantFromGgufPath(inputs.ggufPath)
+        const bar = quant === 'f16' || quant === 'f32' ? 0.999 : 0.98
+        t.ok(cos > bar, `two-camera cos ${cos.toFixed(6)} > ${bar} (${quant})`)
       } else {
         t.comment('PI05_TEST_ACTIONS_2CAM not set, two-camera parity not checked')
       }
