@@ -1,4 +1,8 @@
-# Browser (experimental)
+---
+title: Browser (experimental)
+description: Run the SDK in a web page, with the LLM addon on WebGPU in a Dedicated Worker.
+schemaType: TechArticle
+---
 
 In a web page, `@qvac/sdk` runs the same client API it runs on Node, Bare and
 Expo. Requests go to the same worker request handling and `@qvac/inference`
@@ -52,7 +56,8 @@ Supported:
   survives reloads.
 - `completion`: streaming, events, reasoning, tool calls and generation
   parameters.
-- `cancel`.
+- `cancel`. It takes effect at the next generated token, so on the CPU fallback a
+  long prompt evaluation finishes first.
 - `unloadModel` and `close`.
 
 Requests run one at a time.
@@ -60,6 +65,7 @@ Requests run one at a time.
 Not available in the browser, each failing with an error that says so:
 
 - Model types other than `llamacpp-completion`.
+- Media (image or audio) messages.
 - Registry (`registry://`) and peer-to-peer (`pear://`) model sources.
 - Sharded models.
 - RAG.

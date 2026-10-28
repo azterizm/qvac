@@ -240,3 +240,35 @@ test('rename and recursive rm update both the index and OPFS', async (t) => {
   t.alike(fs.readdirSync('/.qvac/models'), [])
   await fs.promises.rm('/.qvac/models/a', { recursive: true, force: true })
 })
+
+test('write stream: a small file written by stream is readable synchronously', async (t) => {
+  await new Promise<void>((resolve, reject) => {
+    const stream = fs.createWriteStream('/.qvac/small.json')
+    stream.on('error', reject)
+    stream.on('finish', () => resolve())
+    stream.write(encode('{"a":'))
+    stream.write(encode('1}'))
+    stream.end()
+  })
+  t.is(fs.readFileSync('/.qvac/small.json', 'utf8'), '{"a":1}')
+})
+
+test('write stream: a failed write is reported as a stream error', async (t) => {
+  const qvacDir = await root.getDirectoryHandle('.qvac')
+  const full = await qvacDir.getFileHandle('full.bin', { create: true })
+  full.createSyncAccessHandle = async () => ({
+    write: () => {
+      throw new Error('QuotaExceededError')
+    },
+    truncate: () => {},
+    getSize: () => 0,
+    flush: () => {},
+    close: () => {}
+  })
+  const error = await new Promise<Error>((resolve) => {
+    const stream = fs.createWriteStream('/.qvac/full.bin')
+    stream.on('error', resolve)
+    stream.write(encode('data'))
+  })
+  t.ok(/QuotaExceeded/.test(error.message))
+})

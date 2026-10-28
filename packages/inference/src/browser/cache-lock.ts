@@ -8,16 +8,22 @@ const logger = getEngineLogger()
 
 const LOCK_NAME = 'qvac-cache'
 
+// The lock is granted asynchronously, so a release can arrive first.
+let state: 'idle' | 'requested' | 'held' = 'idle'
 let release: (() => void) | null = null
 
 export function acquireCacheLock(): void {
   const locks = browser.navigator.locks
-  if (release || !locks) return
+  if (state !== 'idle' || !locks) return
+  state = 'requested'
   void locks.request(LOCK_NAME, { ifAvailable: true }, (lock) => {
+    if (state !== 'requested') return undefined
     if (!lock) {
+      state = 'idle'
       logger.warn('Another tab or worker of this origin is using the model cache')
       return undefined
     }
+    state = 'held'
     logger.debug('Cache lock acquired')
     return new Promise<void>((resolve) => {
       release = resolve
@@ -26,8 +32,10 @@ export function acquireCacheLock(): void {
 }
 
 export function releaseCacheLock(): void {
-  if (!release) return
-  release()
+  if (state === 'held' && release) {
+    release()
+    logger.debug('Cache lock released')
+  }
   release = null
-  logger.debug('Cache lock released')
+  state = 'idle'
 }

@@ -12,11 +12,14 @@
 // land. Large file contents are only streamed, through sync access handles
 // (Dedicated Worker only) for writes and Blob slices for reads.
 //
-// One worker per origin is assumed to own the tree; another tab changing it
-// is not seen until that worker reloads.
+// Only the engine's own directory (`/.qvac`, as HOME is `/`) is indexed up
+// front, so other data the app keeps in OPFS is never read. One worker per
+// origin is assumed to own the tree; another tab changing it is not seen until
+// that worker reloads.
 
 import { Readable, Writable } from 'bare-stream'
 import Buffer from 'bare-buffer'
+import { getEngineLogger } from '@/logging/index'
 import {
   browser,
   type DirectoryHandle,
@@ -32,6 +35,10 @@ type Entry =
 
 // Contents up to this size are kept in memory so readFileSync works on them.
 const INLINE_LIMIT = 1024 * 1024
+
+const ENGINE_ROOT = '/.qvac'
+
+const logger = getEngineLogger()
 
 const entries = new Map<string, Entry>([['/', { kind: 'directory', mtimeMs: Date.now() }]])
 let hydrated: Promise<void> | null = null
@@ -120,22 +127,30 @@ async function opfsRemove(path: string, recursive: boolean): Promise<void> {
 
 async function walk(directory: DirectoryHandle, path: string): Promise<void> {
   for await (const [name, handle] of directory) {
-    const child = path === '/' ? `/${name}` : `${path}/${name}`
-    if (handle.kind === 'directory') {
-      entries.set(child, { kind: 'directory', mtimeMs: Date.now() })
-      await walk(handle, child)
-    } else {
-      const file = await handle.getFile()
-      const data = file.size <= INLINE_LIMIT ? new Uint8Array(await file.arrayBuffer()) : null
-      entries.set(child, { kind: 'file', size: file.size, mtimeMs: file.lastModified, data })
+    const child = `${path}/${name}`
+    try {
+      if (handle.kind === 'directory') {
+        entries.set(child, { kind: 'directory', mtimeMs: Date.now() })
+        await walk(handle, child)
+      } else {
+        const file = await handle.getFile()
+        const data = file.size <= INLINE_LIMIT ? new Uint8Array(await file.arrayBuffer()) : null
+        entries.set(child, { kind: 'file', size: file.size, mtimeMs: file.lastModified, data })
+      }
+    } catch (error) {
+      // e.g. a file another context holds open with a sync access handle.
+      logger.warn(`Skipping unreadable OPFS entry ${child}: ${String(error)}`)
     }
   }
 }
 
-/** Loads the OPFS index. Must complete before any synchronous call. */
+/** Loads the OPFS index of `/.qvac`. Must complete before any synchronous call. */
 export function hydrate(): Promise<void> {
   if (!hydrated) {
-    hydrated = browser.navigator.storage.getDirectory().then((root) => walk(root, '/'))
+    hydrated = opfsDirectory(ENGINE_ROOT, true).then((directory) => {
+      entries.set(ENGINE_ROOT, { kind: 'directory', mtimeMs: Date.now() })
+      return walk(directory, ENGINE_ROOT)
+    })
   }
   return hydrated
 }
@@ -145,6 +160,17 @@ function persist(task: () => Promise<void>): Promise<void> {
   const result = persistQueue.then(task)
   persistQueue = result.catch(() => {})
   return result
+}
+
+/**
+ * Persists a synchronous call's change. The caller has already returned, so a
+ * failure (quota, a locked file) can only be reported: the index keeps the
+ * change for this session but OPFS does not have it.
+ */
+function persistInBackground(path: string, task: () => Promise<void>): void {
+  persist(task).catch((error: unknown) => {
+    logger.error(`Failed to persist ${path} to the origin private file system: ${String(error)}`)
+  })
 }
 
 // --- index operations --------------------------------------------------------
@@ -202,6 +228,13 @@ function removeTree(path: string): void {
   for (const key of [...entries.keys()]) {
     if (key === path || key.startsWith(prefix)) entries.delete(key)
   }
+}
+
+function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const out = new Uint8Array(a.byteLength + b.byteLength)
+  out.set(a)
+  out.set(b, a.byteLength)
+  return out
 }
 
 class Stats {
@@ -270,7 +303,7 @@ export function accessSync(path: string | URL): void {
 export function mkdirSync(path: string | URL, options?: { recursive?: boolean }): void {
   const created = makeDirectory(normalize(path), !!options?.recursive)
   const last = created[created.length - 1]
-  if (last) void persist(() => opfsDirectory(last, true).then(() => {}))
+  if (last) persistInBackground(last, () => opfsDirectory(last, true).then(() => {}))
 }
 
 export function readdirSync(path: string | URL, options?: unknown): string[] | Dirent[] {
@@ -294,7 +327,7 @@ export function writeFileSync(path: string | URL, data: unknown, options?: unkno
   const bytes = toBytes(data, encodingOf(options))
   setFile(target, bytes)
   const copy = bytes.slice()
-  void persist(() => opfsWrite(target, copy))
+  persistInBackground(target, () => opfsWrite(target, copy))
 }
 
 export function unlinkSync(path: string | URL): void {
@@ -302,7 +335,7 @@ export function unlinkSync(path: string | URL): void {
   const entry = lookup(target, 'unlink')
   if (entry.kind === 'directory') throw new FsError('EISDIR', 'unlink', target)
   entries.delete(target)
-  void persist(() => opfsRemove(target, false))
+  persistInBackground(target, () => opfsRemove(target, false))
 }
 
 // --- promise API -------------------------------------------------------------------
@@ -488,26 +521,37 @@ export function createWriteStream(path: string | URL, options?: { flags?: string
     current.close()
   }
 
+  // Contents of a file that stays within INLINE_LIMIT, for readFileSync.
+  let inline: Uint8Array | null =
+    append && existing?.kind === 'file' ? existing.data : new Uint8Array(0)
+
+  // Runs @p step once the handle is open, reporting any failure (a full quota,
+  // a closed handle) to the stream instead of leaving it waiting.
+  const whenOpen = (step: () => void, callback: (error?: Error | null) => void) => {
+    opened.then(
+      () => {
+        try {
+          step()
+          callback(null)
+        } catch (error) {
+          callback(error as Error)
+        }
+      },
+      (error: Error) => callback(error)
+    )
+  }
+
   return new Writable({
     write(chunk: Uint8Array, _encoding: string, callback: (error?: Error | null) => void) {
-      opened.then(
-        () => {
-          const bytes = toBytes(chunk)
-          position += syncHandle().write(bytes, { at: position })
-          entries.set(target, { kind: 'file', size: position, mtimeMs: Date.now(), data: null })
-          callback(null)
-        },
-        (error: Error) => callback(error)
-      )
+      whenOpen(() => {
+        const bytes = toBytes(chunk)
+        position += syncHandle().write(bytes, { at: position })
+        inline = inline && position <= INLINE_LIMIT ? concatBytes(inline, bytes) : null
+        entries.set(target, { kind: 'file', size: position, mtimeMs: Date.now(), data: inline })
+      }, callback)
     },
     final(callback: (error?: Error | null) => void) {
-      opened.then(
-        () => {
-          release()
-          callback(null)
-        },
-        (error: Error) => callback(error)
-      )
+      whenOpen(release, callback)
     },
     destroy(error: Error | null, callback: (error?: Error | null) => void) {
       opened.then(release, () => {}).then(() => callback(error))

@@ -89,7 +89,11 @@ const picojson = await extract('picojson', lock.picojson)
 const concurrentqueue = await extract('concurrentqueue', lock.concurrentqueue)
 const dawnArchive = await download(lock.dawn, `dawn-${lock.dawn.sha256}.zip`)
 const dawn = join(scratch, 'src', `dawn-${lock.dawn.sha256.slice(0, 16)}`)
-if (!existsSync(dawn)) run('unzip', ['-q', dawnArchive, '-d', dawn])
+if (!existsSync(dawn)) {
+  rmSync(`${dawn}.staging`, { recursive: true, force: true })
+  run('unzip', ['-q', dawnArchive, '-d', `${dawn}.staging`])
+  renameSync(`${dawn}.staging`, dawn)
+}
 
 const build = join(scratch, 'cmake')
 mkdirSync(output, { recursive: true })

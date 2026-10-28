@@ -488,7 +488,7 @@ backend_selection::parseBackendOverride(const std::string& backendStr) {
         qvac_errors::general_error::InvalidArgument,
         string_format(
             "backend: '%s' names no backend. Expected a comma-separated list "
-            "of cuda/vulkan/metal/opencl or 'auto', for example "
+            "of cuda/vulkan/metal/opencl/webgpu or 'auto', for example "
             "'cuda,vulkan'. To run on CPU use device 'cpu' instead.\n",
             backendStr.c_str()));
   }
