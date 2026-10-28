@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include "model-interface/ParakeetTypes.hpp"
+#include "model-interface/parakeet/AttributedTranscription.hpp"
 #include "model-interface/parakeet/ParakeetConfig.hpp"
 #include "model-interface/parakeet/ParakeetModel.hpp"
 
@@ -82,6 +83,345 @@ TEST(ParakeetEngineOptions, DefaultsMatchSpeechCpp) {
   EXPECT_FLOAT_EQ(built.prewarm_audio_seconds, fabric.prewarm_audio_seconds);
   EXPECT_EQ(built.long_form_window_frames, fabric.long_form_window_frames);
   EXPECT_EQ(built.long_form_context_frames, fabric.long_form_context_frames);
+  EXPECT_EQ(built.backend, fabric.backend);
+}
+
+TEST(ParakeetEngineOptions, ExplicitSelectorsAreIndependentOfGpuPreference) {
+  for (const std::string backend :
+       {"cpu",
+        "metal",
+        "cuda",
+        "vulkan",
+        "opencl",
+        "webgpu",
+        "hexagon",
+        "CUDA1",
+        "MTL0",
+        "HTP0",
+        "unknown-device"}) {
+    for (const bool useGpu : {false, true}) {
+      ParakeetConfig config;
+      config.backend = backend;
+      config.useGPU = useGpu;
+      const auto options =
+          ParakeetModel::buildEngineOptions(config, "asr.gguf");
+      EXPECT_EQ(options.backend, backend);
+      EXPECT_EQ(options.n_gpu_layers > 0, useGpu);
+    }
+  }
+}
+
+TEST(ParakeetAttribution, OmittedOptionsKeepNativeDefaults) {
+  const pkt::AttributedTranscriptionOptions native;
+  const auto options = ParakeetModel::buildAttributionOptions(ParakeetConfig{});
+  EXPECT_EQ(options.merge_same_speaker, native.merge_same_speaker);
+  EXPECT_EQ(options.min_segment_ms, native.min_segment_ms);
+  EXPECT_EQ(options.pad_segment_ms, native.pad_segment_ms);
+  EXPECT_FLOAT_EQ(options.diarization.threshold, native.diarization.threshold);
+  EXPECT_EQ(
+      options.diarization.min_segment_ms, native.diarization.min_segment_ms);
+}
+
+TEST(ParakeetAttribution, CancellationAfterDiarizationPreventsAsrCalls) {
+  std::vector<float> audio(100);
+  bool cancelled = false;
+  int asrCalls = 0;
+  AttributedTranscription transcription(
+      audio,
+      100,
+      {},
+      [&] {
+        cancelled = true;
+        pkt::DiarizationResult result;
+        result.segments = {{0, 0.0, 1.0}};
+        return result;
+      },
+      [&](std::span<const float>) {
+        ++asrCalls;
+        return "text";
+      },
+      [&] {
+        if (cancelled)
+          throw std::runtime_error("cancelled");
+      });
+  EXPECT_THROW(transcription.run(), std::runtime_error);
+  EXPECT_EQ(asrCalls, 0);
+}
+
+TEST(ParakeetAttribution, CancellationDuringFirstAsrTurnPreventsLaterTurns) {
+  std::vector<float> audio(100);
+  bool cancelled = false;
+  int asrCalls = 0;
+  AttributedTranscription transcription(
+      audio,
+      100,
+      {},
+      [] {
+        pkt::DiarizationResult result;
+        result.segments = {{0, 0.0, 0.3}, {1, 0.3, 0.6}, {0, 0.6, 1.0}};
+        return result;
+      },
+      [&](std::span<const float>) {
+        ++asrCalls;
+        cancelled = true;
+        return "text";
+      },
+      [&] {
+        if (cancelled)
+          throw std::runtime_error("cancelled");
+      });
+  EXPECT_THROW(transcription.run(), std::runtime_error);
+  EXPECT_EQ(asrCalls, 1);
+}
+
+TEST(ParakeetAttribution, PaddingIsClampedAndShortTurnsRespectMinimumDuration) {
+  std::vector<float> audio(100);
+  pkt::AttributedTranscriptionOptions options;
+  options.pad_segment_ms = 100;
+  options.min_segment_ms = 150;
+  int asrCalls = 0;
+  AttributedTranscription transcription(
+      audio,
+      100,
+      options,
+      [] {
+        pkt::DiarizationResult result;
+        result.segments = {
+            {0, 0.0, 0.01}, {1, 0.1, 0.3}, {1, 0.6, 0.9}, {2, 0.9, 1.0}};
+        return result;
+      },
+      [&](std::span<const float> slice) {
+        EXPECT_GE(slice.data(), audio.data());
+        EXPECT_LE(slice.data() + slice.size(), audio.data() + audio.size());
+        ++asrCalls;
+        return "turn";
+      },
+      [] {});
+  const auto result = transcription.run();
+  EXPECT_EQ(asrCalls, 3);
+  ASSERT_EQ(result.segments.size(), 2U);
+  EXPECT_EQ(result.segments[0].speaker_id, 1);
+  EXPECT_EQ(result.segments[0].text, "turn turn");
+  EXPECT_DOUBLE_EQ(result.segments[0].start_s, 0.1);
+  EXPECT_DOUBLE_EQ(result.segments[0].end_s, 0.9);
+}
+
+TEST(ParakeetAttribution, NegativeDurationsAreRejectedAtTheNativeBoundary) {
+  ParakeetConfig config;
+  config.speakerAttribution =
+      SpeakerAttributionConfig{"diarizer.gguf", false, -1, 0};
+  EXPECT_THROW(ParakeetModel model(config), std::exception);
+  config.speakerAttribution->minSegmentMs = 0;
+  config.speakerAttribution->padSegmentMs = -1;
+  EXPECT_THROW(ParakeetModel model(config), std::exception);
+}
+
+TEST(ParakeetAttribution, ExplicitFalseAndZeroAreNotTreatedAsUnset) {
+  ParakeetConfig config;
+  config.speakerAttribution =
+      SpeakerAttributionConfig{"diarizer.gguf", false, 0, 0};
+  config.diarizationThreshold = 0.3F;
+  config.diarizationMinSegmentMs = 0;
+  const auto options = ParakeetModel::buildAttributionOptions(config);
+  EXPECT_FALSE(options.merge_same_speaker);
+  EXPECT_EQ(options.min_segment_ms, 0);
+  EXPECT_EQ(options.pad_segment_ms, 0);
+  EXPECT_FLOAT_EQ(options.diarization.threshold, 0.3F);
+  EXPECT_EQ(options.diarization.min_segment_ms, 0);
+}
+
+TEST(ParakeetAttribution, NativeSegmentTextSpeakersAndTimesArePreserved) {
+  pkt::AttributedTranscriptionResult result;
+  result.segments = {
+      {0, "First speaker.", 0.125, 1.5}, {1, "Second speaker.", 1.75, 3.0}};
+  const auto mapped = ParakeetModel::toAttributedTranscripts(result, 4.0F);
+  ASSERT_EQ(mapped.size(), 2U);
+  EXPECT_EQ(mapped[0].text, "First speaker.");
+  EXPECT_EQ(mapped[0].speakerId, 0);
+  EXPECT_FLOAT_EQ(mapped[0].start, 4.125F);
+  EXPECT_FLOAT_EQ(mapped[0].end, 5.5F);
+  EXPECT_TRUE(mapped[0].toAppend);
+  EXPECT_EQ(mapped[0].isFinal, true);
+  EXPECT_EQ(mapped[1].text, "Second speaker.");
+  EXPECT_EQ(mapped[1].speakerId, 1);
+  EXPECT_FLOAT_EQ(mapped[1].start, 5.75F);
+  EXPECT_FLOAT_EQ(mapped[1].end, 7.0F);
+  EXPECT_TRUE(
+      ParakeetModel::toAttributedTranscripts(
+          pkt::AttributedTranscriptionResult{})
+          .empty());
+}
+
+TEST(
+    ParakeetAttribution,
+    ConfigurationIdentityIncludesBackendAndEveryAttributionOption) {
+  ParakeetConfig base;
+  ParakeetConfig other = base;
+  other.backend = "CUDA1";
+  EXPECT_NE(base, other);
+  base.speakerAttribution = SpeakerAttributionConfig{"diarizer.gguf"};
+  EXPECT_NE(base, other);
+  other = base;
+  EXPECT_EQ(base, other);
+  other.speakerAttribution->modelPath = "other.gguf";
+  EXPECT_NE(base, other);
+  other = base;
+  other.speakerAttribution->mergeSameSpeaker = false;
+  EXPECT_NE(base, other);
+  other = base;
+  other.speakerAttribution->minSegmentMs = 0;
+  EXPECT_NE(base, other);
+  other = base;
+  other.speakerAttribution->padSegmentMs = 0;
+  EXPECT_NE(base, other);
+}
+
+TEST(ParakeetAttribution, StreamingAndMissingDiarizerPathAreRejected) {
+  ParakeetConfig config;
+  config.speakerAttribution = SpeakerAttributionConfig{};
+  EXPECT_THROW(ParakeetModel model(config), std::exception);
+  config.speakerAttribution->modelPath = "diarizer.gguf";
+  config.streaming = true;
+  EXPECT_THROW(ParakeetModel model(config), std::exception);
+}
+
+TEST(
+    ParakeetAttribution, FailedSecondModelLoadDoesNotLeaveTheFirstModelLoaded) {
+  const auto path = ggufTestPath();
+  if (path.empty() || !std::filesystem::exists(path)) {
+    GTEST_SKIP() << "Set QVAC_TEST_GGUF to a transcription model";
+  }
+  ParakeetConfig config;
+  config.modelPath = path;
+  config.backend = "cpu";
+  config.speakerAttribution = SpeakerAttributionConfig{path + ".missing"};
+  ParakeetModel model(config);
+  EXPECT_THROW(model.load(), std::exception);
+  EXPECT_FALSE(model.isLoaded());
+  config.speakerAttribution.reset();
+  model.setConfig(config);
+  EXPECT_NO_THROW(model.load());
+  EXPECT_TRUE(model.isLoaded());
+}
+
+TEST(ParakeetAttribution, AnAsrModelCannotBeUsedAsTheDiarizer) {
+  const auto path = ggufTestPath();
+  if (path.empty() || !std::filesystem::exists(path)) {
+    GTEST_SKIP() << "Set QVAC_TEST_GGUF to a transcription model";
+  }
+  ParakeetConfig config;
+  config.modelPath = path;
+  config.backend = "cpu";
+  config.speakerAttribution = SpeakerAttributionConfig{path};
+  ParakeetModel model(config);
+  EXPECT_THROW(model.load(), std::exception);
+  EXPECT_FALSE(model.isLoaded());
+}
+
+TEST(ParakeetAttribution, RealPipelineMatchesNativeAttributedTranscription) {
+  const char* diarizer = std::getenv("QVAC_TEST_DIARIZER_GGUF");
+  const char* audioPath = std::getenv("QVAC_TEST_AUDIO_PCM");
+  if (ggufTestPath().empty() || diarizer == nullptr || audioPath == nullptr) {
+    GTEST_SKIP() << "Set QVAC_TEST_GGUF, QVAC_TEST_DIARIZER_GGUF and "
+                    "QVAC_TEST_AUDIO_PCM";
+  }
+  const auto audio = readRawPcm(audioPath);
+  ASSERT_FALSE(audio.empty());
+  ParakeetConfig config = modelConfig();
+  config.backend = "cpu";
+  config.speakerAttribution = SpeakerAttributionConfig{diarizer, false, 0, 80};
+  pkt::Engine nativeAsr(
+      ParakeetModel::buildEngineOptions(config, config.modelPath));
+  pkt::Engine nativeDiarizer(
+      ParakeetModel::buildEngineOptions(config, diarizer));
+  const auto native = pkt::transcribe_samples_with_speakers(
+      nativeDiarizer,
+      nativeAsr,
+      audio.data(),
+      static_cast<int>(audio.size()),
+      SAMPLE_RATE_HZ,
+      ParakeetModel::buildAttributionOptions(config));
+  ASSERT_FALSE(native.segments.empty());
+  ParakeetModel model(config);
+  model.load();
+  const auto output =
+      std::any_cast<ParakeetModel::Output>(model.process(std::any(audio)));
+  ASSERT_EQ(output.size(), native.segments.size());
+  for (size_t index = 0; index < output.size(); ++index) {
+    EXPECT_EQ(output[index].text, native.segments[index].text);
+    EXPECT_EQ(output[index].speakerId, native.segments[index].speaker_id);
+    EXPECT_FLOAT_EQ(
+        output[index].start,
+        static_cast<float>(native.segments[index].start_s));
+    EXPECT_FLOAT_EQ(
+        output[index].end, static_cast<float>(native.segments[index].end_s));
+  }
+}
+
+TEST(
+    ParakeetStreamingMetadata,
+    AsrTokensFinalityChunkAndConfidenceArePreserved) {
+  pkt::StreamingSegment segment;
+  segment.text = "Hello.";
+  segment.token_ids = {3, 5, 8};
+  segment.start_s = 0.125;
+  segment.end_s = 1.5;
+  segment.chunk_index = 0;
+  segment.is_final = false;
+  segment.is_eou_boundary = true;
+  segment.eot_confidence = 0.875F;
+  const auto mapped = ParakeetModel::toStreamingTranscript(segment);
+  EXPECT_EQ(mapped.text, segment.text);
+  ASSERT_TRUE(mapped.tokenIds);
+  EXPECT_EQ(*mapped.tokenIds, segment.token_ids);
+  EXPECT_EQ(mapped.isFinal, false);
+  EXPECT_EQ(mapped.chunkIndex, 0);
+  EXPECT_EQ(mapped.eotConfidence, 0.875F);
+  EXPECT_TRUE(mapped.isEndOfTurn);
+  EXPECT_FLOAT_EQ(mapped.start, 0.125F);
+  EXPECT_FLOAT_EQ(mapped.end, 1.5F);
+  segment.text.clear();
+  segment.token_ids.clear();
+  segment.is_final = true;
+  const auto terminal = ParakeetModel::toStreamingTranscript(segment);
+  EXPECT_TRUE(terminal.text.empty());
+  EXPECT_EQ(terminal.isFinal, true);
+  ASSERT_TRUE(terminal.tokenIds);
+  EXPECT_TRUE(terminal.tokenIds->empty());
+}
+
+TEST(
+    ParakeetStreamingMetadata,
+    DiarizationAndSyntheticFinalMarkersKeepFinality) {
+  pkt::StreamingDiarizationSegment segment;
+  segment.speaker_id = 2;
+  segment.start_s = 1.0;
+  segment.end_s = 2.0;
+  segment.chunk_index = 3;
+  const auto mapped = ParakeetModel::toStreamingDiarizationTranscript(segment);
+  EXPECT_EQ(mapped.speakerId, 2);
+  EXPECT_EQ(mapped.chunkIndex, 3);
+  segment.speaker_id = -1;
+  segment.is_final = true;
+  const auto terminal =
+      ParakeetModel::toStreamingDiarizationTranscript(segment);
+  EXPECT_TRUE(terminal.text.empty());
+  EXPECT_EQ(terminal.isFinal, true);
+  EXPECT_EQ(terminal.speakerId, -1);
+}
+
+TEST(
+    ParakeetStreamingMetadata,
+    EndOfTurnPreservesDoublePrecisionAndZeroConfidence) {
+  pkt::StreamEvent event;
+  event.type = pkt::StreamEventType::EndOfTurn;
+  event.timestamp_s = 12.123456789;
+  event.chunk_index = 0;
+  event.eot_confidence = 0.0F;
+  const auto mapped = ParakeetModel::toEndOfTurnEvent(event);
+  EXPECT_DOUBLE_EQ(mapped.timestamp, event.timestamp_s);
+  EXPECT_EQ(mapped.chunkIndex, 0);
+  EXPECT_FLOAT_EQ(mapped.confidence, 0.0F);
 }
 
 TEST(ParakeetEngineOptions, ForwardPrewarmAndLongForm) {
@@ -186,6 +526,7 @@ TEST(ParakeetVadEvents, VadStateChangesMapOntoVadEvent) {
   speaking.vad_score = 0.87F;
   speaking.timestamp_s = 4.25;
   speaking.speaker_id = 2;
+  speaking.chunk_index = 3;
 
   auto event = ParakeetModel::toVadEvent(speaking, VadSource::Sortformer);
   ASSERT_TRUE(event.has_value());
@@ -193,6 +534,7 @@ TEST(ParakeetVadEvents, VadStateChangesMapOntoVadEvent) {
   EXPECT_FLOAT_EQ(event->score, 0.87F);
   EXPECT_DOUBLE_EQ(event->timestamp, 4.25);
   EXPECT_EQ(event->speakerId, 2);
+  EXPECT_EQ(event->chunkIndex, 3);
   EXPECT_EQ(event->source, VadSource::Sortformer);
 
   pkt::StreamEvent silent;
