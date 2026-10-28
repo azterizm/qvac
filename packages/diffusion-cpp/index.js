@@ -94,9 +94,18 @@ class ImgStableDiffusion {
     async _load() {
         this.logger.info('Starting stable-diffusion model load');
         const filesWithClipVision = this._files;
+        const config = this._config;
+        const useCudaVae = config.prediction === 'flux2_flow' &&
+            /^cuda\d+$/i.test(config.backend || '') &&
+            (config.device === undefined || config.device === 'gpu') &&
+            config.vae_conv_direct === undefined &&
+            (config.vae_auto_cpu_fallback === undefined || config.vae_auto_cpu_fallback === false) &&
+            (config.type === undefined || config.type === 'auto') &&
+            !config.tensor_type_rules;
         const configurationParams = {
             ...(0, file_paths_1.toFilePaths)(filesWithClipVision),
-            config: this._config
+            // FLUX.2's CUDA VAE is faster through im2col + GEMM.
+            config: useCudaVae ? { ...config, vae_conv_direct: false } : config
         };
         this.logger.info('Creating stable-diffusion addon with configuration:', configurationParams);
         try {
