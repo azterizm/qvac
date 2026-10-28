@@ -7,12 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `runStream()` and `runStreaming()` stats keep `backendDevice`, `backendId`,
+  `gpuUnsupported` and the LavaSR enhancer / denoiser backend fields from the
+  last chunk that reported them, as they already did for `codecSidecarLoaded`
+  and `codecOnCoreml`, so a chunked Audio8 run reports where it ran.
+
+## [0.14.1] - 2026-10-28
+
 ### Changed
 
-- Align the shared native `speech-cpp` source to `2026-10-26` across the speech addons.
-- Project only required MOSS Delay text-control logits on Metal.
-- Avoid duplicate reference encoding when MOSS-TTSD dialogue uses one recording.
-- Align TTSD prompts and reference level normalization with the native pipeline.
+- Align the shared native `speech-cpp` source to `2026-10-27` across the speech
+  addons ([#5397](https://github.com/tetherto/qvac/pull/5397)).
+- Reuse MOSS-SoundEffect conditioning across diffusion steps and use supported
+  Metal DiT FlashAttention. Memory preflight includes the request cache
+  alongside retained scheduler scratch across requests
+  ([#5397](https://github.com/tetherto/qvac/pull/5397)).
+- Project only required MOSS Delay text-control logits on Metal
+  ([#5368](https://github.com/tetherto/qvac/pull/5368)).
+- Avoid duplicate reference encoding when MOSS-TTSD dialogue uses one recording
+  ([#5368](https://github.com/tetherto/qvac/pull/5368)).
+- Align TTSD prompts and reference level normalization with the native pipeline
+  ([#5368](https://github.com/tetherto/qvac/pull/5368)).
 - The shared native `ggml-speech` moves to `2026-10-27` across the speech
   addons, which also speeds up single-query Metal softmax on long KV caches
   ([#5392](https://github.com/tetherto/qvac/pull/5392)).
@@ -21,16 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Adreno GPUs (Android, OpenCL): matrix products on every quantized weight
   type whose sums exceed the fp16 range no longer come back as infinity;
-  `ggml-speech` `2026-10-23` fixed q8_0 only.
+  `ggml-speech` `2026-10-23` fixed q8_0 only
+  ([#5392](https://github.com/tetherto/qvac/pull/5392)).
 - Metal: a fused SwiGLU mat-vec whose output overlaps its inputs, and copies
   into strided destinations, no longer produce wrong values; quantized matrix
-  products keep F32 activations.
+  products keep F32 activations
+  ([#5392](https://github.com/tetherto/qvac/pull/5392)).
 - Vulkan: tensor views not aligned for the speech ops fall back instead of
-  returning wrong data.
-- `runStream()` and `runStreaming()` stats keep `backendDevice`, `backendId`,
-  `gpuUnsupported` and the LavaSR enhancer / denoiser backend fields from the
-  last chunk that reported them, as they already did for `codecSidecarLoaded`
-  and `codecOnCoreml`, so a chunked Audio8 run reports where it ran.
+  returning wrong data ([#5392](https://github.com/tetherto/qvac/pull/5392)).
 
 ## [0.14.0] - 2026-10-23
 
