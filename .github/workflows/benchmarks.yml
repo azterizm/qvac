@@ -46,6 +46,8 @@ on:
         description: Optional mocha --grep over the mobile test names; empty runs what the package's test:mobile selects
         type: string
         default: ""
+  pull_request:
+    paths: [.github/workflows/benchmarks.yml]
 
 permissions: {}
 
@@ -55,6 +57,7 @@ concurrency:
 
 jobs:
   select:
+    if: github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
     uses: ./.github/workflows/_select-projects.yml
