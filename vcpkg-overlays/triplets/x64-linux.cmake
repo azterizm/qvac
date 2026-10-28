@@ -11,9 +11,8 @@ set(VCPKG_LINKER_FLAGS "-stdlib=libc++")
 # Build only Release configuration to avoid vcpkg debug dependency builds in CI.
 set(VCPKG_BUILD_TYPE release)
 
-# Hash the provisioned toolkit into the CUDA ports' ABI. Compiler paths are
-# preserved but untracked so identical toolkits on different runners can share.
+# Hash the provisioned toolkit into the CUDA ports' ABI. setup-cuda keeps
+# CUDACXX and CUDA_PATH in the build environment via VCPKG_KEEP_ENV_VARS.
 if(PORT STREQUAL "qvac-fabric" OR PORT STREQUAL "ggml")
   list(APPEND VCPKG_ENV_PASSTHROUGH QVAC_CUDA_TOOLKIT)
-  list(APPEND VCPKG_ENV_PASSTHROUGH_UNTRACKED CUDACXX CUDA_PATH)
 endif()

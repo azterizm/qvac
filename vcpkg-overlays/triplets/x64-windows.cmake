@@ -19,9 +19,8 @@ if(DEFINED ENV{QVAC_MSVC_INSTALLATION} AND DEFINED ENV{QVAC_MSVC_VERSION})
   set(VCPKG_PLATFORM_TOOLSET_VERSION "$ENV{QVAC_MSVC_VERSION}")
 endif()
 
-# Hash the provisioned toolkit into the CUDA ports' ABI. Compiler paths are
-# preserved but untracked so identical toolkits on different runners can share.
+# Hash the provisioned toolkit into the CUDA ports' ABI. setup-cuda keeps
+# CUDACXX and CUDA_PATH in the build environment via VCPKG_KEEP_ENV_VARS.
 if(PORT STREQUAL "qvac-fabric" OR PORT STREQUAL "ggml")
   list(APPEND VCPKG_ENV_PASSTHROUGH QVAC_CUDA_TOOLKIT)
-  list(APPEND VCPKG_ENV_PASSTHROUGH_UNTRACKED CUDACXX CUDA_PATH)
 endif()

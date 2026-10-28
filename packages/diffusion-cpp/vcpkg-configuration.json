@@ -2,7 +2,7 @@
   "default-registry": {
     "kind": "git",
     "reference": "fix-diffusion-ggml-pr130",
-    "baseline": "2f640e4ebd0f44931183a1b155933c4614a3395c",
+    "baseline": "705bea1244e8566131f643241f77bf66aebf5de3",
     "repository": "https://github.com/tetherto/qvac-registry-vcpkg.git"
   },
   "registries": [

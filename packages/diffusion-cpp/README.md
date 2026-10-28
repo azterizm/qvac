@@ -144,7 +144,8 @@ on DGX Spark or `@qvac/diffusion-cpp-linux-x64` on an x64 PC. Each platform
 package carries its host addon and the CUDA and Vulkan backend modules.
 CUDA execution requires the NVIDIA driver and CUDA 13 runtime/cuBLAS
 libraries on the host; the addon itself retains CPU-only load compatibility.
-Windows CUDA remains an explicit source-build option.
+Windows CUDA remains an explicit source-build option and ships runtime-loaded
+backend DLLs alongside the addon.
 
 The server CUDA build uses CUDA 13.0.3 (nvcc 13.0.88) and matches
 qvac-fabric's packaged architectures for each Linux platform:
@@ -161,10 +162,13 @@ keep the npm platform package within its size limit. The host addon must
 also match the CPU architecture. This package does not ship a separate
 Jetson CUDA module.
 
-When `QVAC_CUDA_TOOLKIT=13.0.3-server` is set, the registry rejects a different
-nvcc version. `CUDACXX` selects the compiler explicitly, followed by
-`CUDA_PATH`, `/usr/local/cuda`, and `PATH`. Other local toolkits require at
-least CUDA 12.8 for x64 or 12.9 for ARM64 and warn; they are not release builds.
+Any non-empty `QVAC_CUDA_TOOLKIT` marker requires nvcc 13.0.88; its text
+is hashed into the build's cache identity. Unmarked source builds with another
+compiler version warn and continue; nvcc rejects unsupported architectures.
+`CUDACXX` selects the compiler explicitly. Otherwise discovery follows Fabric:
+`CUDA_PATH` hints, then the default search including `PATH`, then
+`/usr/local/cuda`. Compiler paths are kept through `VCPKG_KEEP_ENV_VARS`,
+which the shared `setup-cuda` action exports.
 
 With automatic backend selection, CUDA devices whose code cannot run are
 skipped, allowing Vulkan or ultimately CPU to be selected. Set

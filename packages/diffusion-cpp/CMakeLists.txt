@@ -27,7 +27,8 @@ endif()
 # portfile), mirroring qvac-fabric: GPU backends are dlopen'd MODULE .so files
 # shipped next to the addon, so the .bare itself never links
 # libvulkan/libOpenCL and loads on hosts without a graphics stack (QVAC-23767).
-# On macOS/iOS (Metal) and Windows GPU backends are statically linked.
+# Windows CUDA source builds also use runtime-loaded GPU modules; other
+# Windows builds and macOS/iOS (Metal) keep static GPU backends.
 
 find_package(cmake-bare REQUIRED PATHS node_modules/cmake-bare)
 find_package(cmake-vcpkg REQUIRED PATHS node_modules/cmake-vcpkg)
@@ -86,12 +87,12 @@ else()
 endif()
 message("Building inference-addon-sd module '${module_name}'")
 
-# On Android and desktop Linux with GGML_BACKEND_DL, install GPU backend .so
-# modules alongside the addon so ggml can dlopen them at runtime.  CPU
+# With GGML_BACKEND_DL, install GPU backend modules alongside the addon
+# on Android, Linux, and Windows CUDA source builds. CPU
 # backends are statically linked (GGML_CPU_STATIC) and excluded from this
 # loop.
 set(BACKEND_DL_EXPORTS "")
-if(GGML_BACKEND_DL AND (ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+if(GGML_BACKEND_DL AND (ANDROID OR WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux"))
   foreach(_backend ${GGML_AVAILABLE_BACKENDS})
     if("${_backend}" MATCHES "^ggml-cpu")
       continue()
