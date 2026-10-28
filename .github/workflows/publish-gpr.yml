@@ -13,9 +13,6 @@ on:
         type: choice
         options: [auto, latest, dev, feature, temp]
         default: auto
-  # Registers the workflow from a branch; every job is off for this event.
-  pull_request:
-    paths: [.github/workflows/publish-gpr.yml]
 
 permissions: {}
 
@@ -25,7 +22,6 @@ concurrency:
 
 jobs:
   select:
-    if: github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
     uses: ./.github/workflows/_select-projects.yml
