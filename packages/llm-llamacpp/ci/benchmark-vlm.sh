@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The VLM matrix's desktop legs for this host, as benchmark-vlm-model-comparison.yml ran them: each backend in
+# The VLM matrix's desktop legs for this host: each backend in
 # VLM_BACKENDS over the addon sources (published, this run's candidate, a baseline release), plus the fabric and
 # upstream CLIs in several-sources mode. Logs and provenance land in benchmarks/results/vlm for the report.
 set -euo pipefail

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The desktop parameter sweep, as benchmark-perf-embed-llamacpp.yml ran it, on this run's prebuilds. The mobile half runs
+# The desktop parameter sweep, on this run's prebuilds. The mobile half runs
 # through benchmarks.yml's mobile job, whose test:mobile picks the sweep's shards.
 set -euo pipefail
 cd "$(dirname "$0")/.."

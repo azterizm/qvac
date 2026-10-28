@@ -10,7 +10,7 @@
 //
 // Run `node scripts/generate-prestage-block.js [android|ios]` and paste the
 // output under `extra-pre-test-commands:` (indented), or wire it via a workflow
-// step (see integration-mobile-test-embed-llamacpp.yml).
+// step (see ci/prepare-mobile.mjs).
 const fs = require('fs')
 const path = require('path')
 

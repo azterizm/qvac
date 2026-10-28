@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The retrieval quality benchmark against transformers, as benchmark-embed-llamacpp.yml ran it, on this run's prebuilds.
+# The retrieval quality benchmark against transformers, on this run's prebuilds.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
