@@ -4232,6 +4232,24 @@ object Models {
         params = "460M",
     )
 
+    val MOBILENETV3_3CLASS_V3_FP16 = ModelConstant(
+        name = "MOBILENETV3_3CLASS_V3_FP16",
+        src = "registry://s3/qvac_models_compiled/ggml/mobilenetv3-3class/2026-10-28/mobilenetv3_3class_v3_fp16.gguf",
+        registryPath = "qvac_models_compiled/ggml/mobilenetv3-3class/2026-10-28/mobilenetv3_3class_v3_fp16.gguf",
+        registrySource = "s3",
+        blobCoreKey = "dcfc2187d23e3a82212144211b94d1bd2f521cc21e18ca66bea8a1f7749bc7a1",
+        blobBlockOffset = 2050891,
+        blobBlockLength = 48,
+        blobByteOffset = 134377529985,
+        modelId = "mobilenetv3_3class_v3_fp16.gguf",
+        expectedSize = 3084800,
+        sha256Checksum = "faaa680c62f989d642032114c8892e9f43e9f2487ff7a350941715c7de9ffb6c",
+        addon = "classification",
+        engine = "ggml-classification",
+        quantization = "fp16",
+        params = "2.5M",
+    )
+
     val MOE_35B_INST_IQ2_XXS = ModelConstant(
         name = "MOE_35B_INST_IQ2_XXS",
         src = "registry://hf/bartowski/Kwaipilot_KAT-Coder-V2.5-Dev-GGUF/resolve/d8f684f08d2950ea9d2db6a35ef7dada0707858b/Kwaipilot_KAT-Coder-V2.5-Dev-IQ2_XXS.gguf",
@@ -4718,6 +4736,24 @@ object Models {
         params = "0.6B",
     )
 
+    val PARAKEET_NEMOTRON_3_DIARIZATION_Q4_K = ModelConstant(
+        name = "PARAKEET_NEMOTRON_3_DIARIZATION_Q4_K",
+        src = "registry://s3/qvac_models_compiled/ggml/parakeet/2026-10-22/Nemotron-3-Diarization.converted.q4_k.gguf",
+        registryPath = "qvac_models_compiled/ggml/parakeet/2026-10-22/Nemotron-3-Diarization.converted.q4_k.gguf",
+        registrySource = "s3",
+        blobCoreKey = "dcfc2187d23e3a82212144211b94d1bd2f521cc21e18ca66bea8a1f7749bc7a1",
+        blobBlockOffset = 1998954,
+        blobBlockLength = 885,
+        blobByteOffset = 130974449965,
+        modelId = "Nemotron-3-Diarization.converted.q4_k.gguf",
+        expectedSize = 57942048,
+        sha256Checksum = "4639dd46782618087f64960fe350950a10712a174d45e7f5d5780a96ffe878ae",
+        addon = "parakeet",
+        engine = "parakeet-transcription",
+        quantization = "q4_k",
+        params = "99.2M",
+    )
+
     val PARAKEET_NEMOTRON_3_DIARIZATION_Q8_0 = ModelConstant(
         name = "PARAKEET_NEMOTRON_3_DIARIZATION_Q8_0",
         src = "registry://s3/qvac_models_compiled/ggml/nemotron/2026-10-09/Nemotron-3-Diarization.q8_0.gguf",
@@ -4734,6 +4770,42 @@ object Models {
         engine = "parakeet-transcription",
         quantization = "q8_0",
         params = "99.2M",
+    )
+
+    val PARAKEET_Q4_0_Q8_0 = ModelConstant(
+        name = "PARAKEET_Q4_0_Q8_0",
+        src = "registry://s3/qvac_models_compiled/ggml/parakeet/2026-10-23/parakeet-mosaic.gguf",
+        registryPath = "qvac_models_compiled/ggml/parakeet/2026-10-23/parakeet-mosaic.gguf",
+        registrySource = "s3",
+        blobCoreKey = "dcfc2187d23e3a82212144211b94d1bd2f521cc21e18ca66bea8a1f7749bc7a1",
+        blobBlockOffset = 1999840,
+        blobBlockLength = 7427,
+        blobByteOffset = 131032418925,
+        modelId = "parakeet-mosaic.gguf",
+        expectedSize = 486693152,
+        sha256Checksum = "9e17114b5773d1b1ed9b6a4fafb0f46427a3bb9a80b77e645c24576bda9188ef",
+        addon = "parakeet",
+        engine = "parakeet-transcription",
+        quantization = "q4_0/q8_0",
+        params = "0.6B",
+    )
+
+    val PARAKEET_Q4_0_Q8_0_Q3_K_IQ3_S = ModelConstant(
+        name = "PARAKEET_Q4_0_Q8_0_Q3_K_IQ3_S",
+        src = "registry://s3/qvac_models_compiled/ggml/parakeet/2026-10-23/parakeet-mosaic-compact.gguf",
+        registryPath = "qvac_models_compiled/ggml/parakeet/2026-10-23/parakeet-mosaic-compact.gguf",
+        registrySource = "s3",
+        blobCoreKey = "dcfc2187d23e3a82212144211b94d1bd2f521cc21e18ca66bea8a1f7749bc7a1",
+        blobBlockOffset = 2026488,
+        blobBlockLength = 5182,
+        blobByteOffset = 132778538615,
+        modelId = "parakeet-mosaic-compact.gguf",
+        expectedSize = 339564832,
+        sha256Checksum = "8229311ec51911e7f305413f8d9430b1e0d357101ffb3b75d32feed6b8520780",
+        addon = "parakeet",
+        engine = "parakeet-transcription",
+        quantization = "q4_0/q8_0/q3_k/iq3_s",
+        params = "0.6B",
     )
 
     val PARAKEET_SORTFORMER_4SPK_V1_F16 = ModelConstant(
@@ -8625,6 +8697,7 @@ object Models {
         MMPROJ_TERNARY_BONSAI_2_27B_MULTIMODAL_Q8_0,
         MMPROJ_VISIONPSY_NANO_460M_MULTIMODAL_Q8_0,
         MMPROJ_VISIONPSY_NANO_460M_MULTIMODAL_Q8_0_1,
+        MOBILENETV3_3CLASS_V3_FP16,
         MOE_35B_INST_IQ2_XXS,
         MOE_35B_INST_Q4_K_M,
         MOE_35B_INST_Q8_0,
@@ -8652,7 +8725,10 @@ object Models {
         PARAKEET_NEMOTRON_0_6B_F16,
         PARAKEET_NEMOTRON_0_6B_Q4_0,
         PARAKEET_NEMOTRON_0_6B_Q8_0,
+        PARAKEET_NEMOTRON_3_DIARIZATION_Q4_K,
         PARAKEET_NEMOTRON_3_DIARIZATION_Q8_0,
+        PARAKEET_Q4_0_Q8_0,
+        PARAKEET_Q4_0_Q8_0_Q3_K_IQ3_S,
         PARAKEET_SORTFORMER_4SPK_V1_F16,
         PARAKEET_SORTFORMER_4SPK_V1_Q4_0,
         PARAKEET_SORTFORMER_4SPK_V1_Q8_0,

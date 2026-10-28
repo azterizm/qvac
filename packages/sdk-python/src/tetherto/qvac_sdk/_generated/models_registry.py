@@ -4241,6 +4241,24 @@ MMPROJ_VISIONPSY_NANO_460M_MULTIMODAL_Q8_0_1 = ModelConstant(
     params="460M",
 )
 
+MOBILENETV3_3CLASS_V3_FP16 = ModelConstant(
+    name="MOBILENETV3_3CLASS_V3_FP16",
+    src="registry://s3/qvac_models_compiled/ggml/mobilenetv3-3class/2026-10-28/mobilenetv3_3class_v3_fp16.gguf",
+    registry_path="qvac_models_compiled/ggml/mobilenetv3-3class/2026-10-28/mobilenetv3_3class_v3_fp16.gguf",
+    registry_source="s3",
+    blob_core_key="dcfc2187d23e3a82212144211b94d1bd2f521cc21e18ca66bea8a1f7749bc7a1",
+    blob_block_offset=2050891,
+    blob_block_length=48,
+    blob_byte_offset=134377529985,
+    model_id="mobilenetv3_3class_v3_fp16.gguf",
+    expected_size=3084800,
+    sha256_checksum="faaa680c62f989d642032114c8892e9f43e9f2487ff7a350941715c7de9ffb6c",
+    addon="classification",
+    engine="ggml-classification",
+    quantization="fp16",
+    params="2.5M",
+)
+
 MOE_35B_INST_IQ2_XXS = ModelConstant(
     name="MOE_35B_INST_IQ2_XXS",
     src="registry://hf/bartowski/Kwaipilot_KAT-Coder-V2.5-Dev-GGUF/resolve/d8f684f08d2950ea9d2db6a35ef7dada0707858b/Kwaipilot_KAT-Coder-V2.5-Dev-IQ2_XXS.gguf",
@@ -4727,6 +4745,24 @@ PARAKEET_NEMOTRON_0_6B_Q8_0 = ModelConstant(
     params="0.6B",
 )
 
+PARAKEET_NEMOTRON_3_DIARIZATION_Q4_K = ModelConstant(
+    name="PARAKEET_NEMOTRON_3_DIARIZATION_Q4_K",
+    src="registry://s3/qvac_models_compiled/ggml/parakeet/2026-10-22/Nemotron-3-Diarization.converted.q4_k.gguf",
+    registry_path="qvac_models_compiled/ggml/parakeet/2026-10-22/Nemotron-3-Diarization.converted.q4_k.gguf",
+    registry_source="s3",
+    blob_core_key="dcfc2187d23e3a82212144211b94d1bd2f521cc21e18ca66bea8a1f7749bc7a1",
+    blob_block_offset=1998954,
+    blob_block_length=885,
+    blob_byte_offset=130974449965,
+    model_id="Nemotron-3-Diarization.converted.q4_k.gguf",
+    expected_size=57942048,
+    sha256_checksum="4639dd46782618087f64960fe350950a10712a174d45e7f5d5780a96ffe878ae",
+    addon="parakeet",
+    engine="parakeet-transcription",
+    quantization="q4_k",
+    params="99.2M",
+)
+
 PARAKEET_NEMOTRON_3_DIARIZATION_Q8_0 = ModelConstant(
     name="PARAKEET_NEMOTRON_3_DIARIZATION_Q8_0",
     src="registry://s3/qvac_models_compiled/ggml/nemotron/2026-10-09/Nemotron-3-Diarization.q8_0.gguf",
@@ -4743,6 +4779,42 @@ PARAKEET_NEMOTRON_3_DIARIZATION_Q8_0 = ModelConstant(
     engine="parakeet-transcription",
     quantization="q8_0",
     params="99.2M",
+)
+
+PARAKEET_Q4_0_Q8_0 = ModelConstant(
+    name="PARAKEET_Q4_0_Q8_0",
+    src="registry://s3/qvac_models_compiled/ggml/parakeet/2026-10-23/parakeet-mosaic.gguf",
+    registry_path="qvac_models_compiled/ggml/parakeet/2026-10-23/parakeet-mosaic.gguf",
+    registry_source="s3",
+    blob_core_key="dcfc2187d23e3a82212144211b94d1bd2f521cc21e18ca66bea8a1f7749bc7a1",
+    blob_block_offset=1999840,
+    blob_block_length=7427,
+    blob_byte_offset=131032418925,
+    model_id="parakeet-mosaic.gguf",
+    expected_size=486693152,
+    sha256_checksum="9e17114b5773d1b1ed9b6a4fafb0f46427a3bb9a80b77e645c24576bda9188ef",
+    addon="parakeet",
+    engine="parakeet-transcription",
+    quantization="q4_0/q8_0",
+    params="0.6B",
+)
+
+PARAKEET_Q4_0_Q8_0_Q3_K_IQ3_S = ModelConstant(
+    name="PARAKEET_Q4_0_Q8_0_Q3_K_IQ3_S",
+    src="registry://s3/qvac_models_compiled/ggml/parakeet/2026-10-23/parakeet-mosaic-compact.gguf",
+    registry_path="qvac_models_compiled/ggml/parakeet/2026-10-23/parakeet-mosaic-compact.gguf",
+    registry_source="s3",
+    blob_core_key="dcfc2187d23e3a82212144211b94d1bd2f521cc21e18ca66bea8a1f7749bc7a1",
+    blob_block_offset=2026488,
+    blob_block_length=5182,
+    blob_byte_offset=132778538615,
+    model_id="parakeet-mosaic-compact.gguf",
+    expected_size=339564832,
+    sha256_checksum="8229311ec51911e7f305413f8d9430b1e0d357101ffb3b75d32feed6b8520780",
+    addon="parakeet",
+    engine="parakeet-transcription",
+    quantization="q4_0/q8_0/q3_k/iq3_s",
+    params="0.6B",
 )
 
 PARAKEET_SORTFORMER_4SPK_V1_F16 = ModelConstant(
@@ -8635,6 +8707,7 @@ __all__ = [
     "MMPROJ_TERNARY_BONSAI_2_27B_MULTIMODAL_Q8_0",
     "MMPROJ_VISIONPSY_NANO_460M_MULTIMODAL_Q8_0",
     "MMPROJ_VISIONPSY_NANO_460M_MULTIMODAL_Q8_0_1",
+    "MOBILENETV3_3CLASS_V3_FP16",
     "MOE_35B_INST_IQ2_XXS",
     "MOE_35B_INST_Q4_K_M",
     "MOE_35B_INST_Q8_0",
@@ -8662,7 +8735,10 @@ __all__ = [
     "PARAKEET_NEMOTRON_0_6B_F16",
     "PARAKEET_NEMOTRON_0_6B_Q4_0",
     "PARAKEET_NEMOTRON_0_6B_Q8_0",
+    "PARAKEET_NEMOTRON_3_DIARIZATION_Q4_K",
     "PARAKEET_NEMOTRON_3_DIARIZATION_Q8_0",
+    "PARAKEET_Q4_0_Q8_0",
+    "PARAKEET_Q4_0_Q8_0_Q3_K_IQ3_S",
     "PARAKEET_SORTFORMER_4SPK_V1_F16",
     "PARAKEET_SORTFORMER_4SPK_V1_Q4_0",
     "PARAKEET_SORTFORMER_4SPK_V1_Q8_0",
