@@ -45,6 +45,15 @@ on:
         required: false
         type: number
         default: 90
+      device-farm-billing-method:
+        description: >-
+          Device Farm billing method passed to schedule-run. UNMETERED uses the
+          account's fixed device slots, which every CI run shares; a run waits in
+          PENDING_CONCURRENCY while they are all busy. METERED bills pay-as-you-go
+          minutes and is the last resort when the slots stay busy.
+        required: false
+        type: string
+        default: UNMETERED
       device-farm-project-arn:
         description: "AWS Device Farm project ARN"
         required: true
@@ -614,8 +623,16 @@ jobs:
 
       - name: Schedule Device Farm run
         id: schedule
+        env:
+          BILLING_METHOD: ${{ inputs.device-farm-billing-method }}
         run: |
-          echo "Scheduling Device Farm run on ${{ steps.select.outputs.name }}..."
+          # test-sdk.yml compares this case-insensitively; match it here.
+          BILLING_METHOD="${BILLING_METHOD^^}"
+          case "$BILLING_METHOD" in
+            UNMETERED|METERED) ;;
+            *) echo "::error::device-farm-billing-method must be UNMETERED or METERED, got '$BILLING_METHOD'"; exit 1 ;;
+          esac
+          echo "Scheduling $BILLING_METHOD Device Farm run on ${{ steps.select.outputs.name }}..."
 
           RUN_NAME="ios-${{ steps.select.outputs.name }}-${{ github.run_number }}-${{ github.run_attempt }}"
 
@@ -626,6 +643,7 @@ jobs:
             --name "$RUN_NAME" \
             --test type=APPIUM_NODE,testPackageArn=${{ steps.upload-test-pkg.outputs.pkg-arn }},testSpecArn=${{ steps.upload-spec.outputs.spec-arn }} \
             --execution-configuration jobTimeoutMinutes=${{ inputs.device-farm-timeout }} \
+            --configuration billingMethod="$BILLING_METHOD" \
             --query 'run.arn' --output text)
 
           echo "run-arn=$RUN_ARN" >> $GITHUB_OUTPUT
@@ -636,7 +654,7 @@ jobs:
           DF_URL="https://us-west-2.console.aws.amazon.com/devicefarm/home#/mobile/projects/${PROJECT_ID}/runs/${RUN_ID}"
           echo "Device Farm Console (${{ steps.select.outputs.name }}): $DF_URL"
 
-          echo "### Device Farm: ${{ steps.select.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Device Farm: ${{ steps.select.outputs.name }} ($BILLING_METHOD)" >> $GITHUB_STEP_SUMMARY
           echo "[Open Device Farm Console]($DF_URL)" >> $GITHUB_STEP_SUMMARY
 
       - name: Save run ARN
@@ -690,6 +708,8 @@ jobs:
           platform: ios
           run-arns-directory: ./run-arns
           start-timeout-minutes: ${{ inputs.device-farm-start-timeout }}
+          # A queued UNMETERED run can outlive the 1h OIDC session.
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
   run-producer:
     name: "[ios] run-producer"
@@ -1029,7 +1049,10 @@ jobs:
               STATUS=$(aws devicefarm get-run --arn "$RUN_ARN" --query 'run.status' --output text 2>/dev/null || echo "UNKNOWN")
               echo "Device $DEVICE_NAME: status=$STATUS"
 
-              if [ "$STATUS" = "RUNNING" ] || [ "$STATUS" = "PENDING" ]; then
+              # An UNMETERED run can still be queued (PENDING_CONCURRENCY, PENDING_DEVICE,
+              # SCHEDULING, ...) when the workflow is cancelled or times out. Stop every
+              # run that has not finished, or it takes a shared slot later for nobody.
+              if [ "$STATUS" != "COMPLETED" ] && [ "$STATUS" != "STOPPING" ]; then
                 echo "Stopping run: $RUN_ARN"
                 aws devicefarm stop-run --arn "$RUN_ARN" || true
               fi

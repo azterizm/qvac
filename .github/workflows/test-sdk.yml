@@ -104,10 +104,17 @@ on:
         description: "Desktop/Electron/Snap connection timeout (seconds)"
         type: number
         default: 60
-      device-farm-start-timeout:
-        description: "Wait for Device Farm run to start (minutes)"
-        type: number
-        default: 15
+      # Took the slot of the Device Farm start timeout: workflow_dispatch allows
+      # at most 25 inputs and this workflow is at the ceiling. A dispatched run
+      # now waits as long as its billing method needs (see device-farm-start-timeout
+      # under workflow_call); callers can still set the timeout explicitly.
+      device-farm-billing-method:
+        description: "Device Farm billing (UNMETERED = shared fixed slots, may queue; METERED = pay-as-you-go, last resort)"
+        type: choice
+        options:
+          - UNMETERED
+          - METERED
+        default: UNMETERED
       android-device-pool:
         description: "Android device pool (blank = random configured pool)"
         type: string
@@ -163,9 +170,17 @@ on:
       device-farm-timeout:
         type: number
         default: 120
+      device-farm-billing-method:
+        description: "Device Farm billing method: UNMETERED (shared fixed slots) or METERED (pay-as-you-go, last resort)"
+        type: string
+        default: UNMETERED
       device-farm-start-timeout:
+        description: >-
+          Minutes to wait for a Device Farm run to enter RUNNING. 0 = by billing
+          method: 180 for UNMETERED, where a run queues in PENDING_CONCURRENCY
+          until one of the slots every CI run shares frees up, and 15 for METERED.
         type: number
-        default: 15
+        default: 0
       android-device-pool:
         type: string
         default: ""
@@ -735,7 +750,8 @@ jobs:
       exclude-suite: ${{ inputs.exclude-suite }}
       include: ${{ inputs.include }}
       device-farm-timeout: ${{ fromJSON(inputs.device-farm-timeout || '120') }}
-      device-farm-start-timeout: ${{ fromJSON(inputs.device-farm-start-timeout || '15') }}
+      device-farm-start-timeout: ${{ fromJSON(inputs.device-farm-start-timeout || (inputs.device-farm-billing-method == 'METERED' && '15' || '180')) }}
+      device-farm-billing-method: ${{ inputs.device-farm-billing-method || 'UNMETERED' }}
       device-farm-project-arn: ${{ vars.SDK_DEVICE_FARM_PROJECT_ARN }}
       device-pools: ${{ vars.SDK_ANDROID_DEVICE_FARM_POOLS }}
       device-pool-name: ${{ inputs.android-device-pool }}
@@ -772,7 +788,8 @@ jobs:
       exclude-suite: ${{ inputs.exclude-suite }}
       include: ${{ inputs.include }}
       device-farm-timeout: ${{ fromJSON(inputs.device-farm-timeout || '120') }}
-      device-farm-start-timeout: ${{ fromJSON(inputs.device-farm-start-timeout || '15') }}
+      device-farm-start-timeout: ${{ fromJSON(inputs.device-farm-start-timeout || (inputs.device-farm-billing-method == 'METERED' && '15' || '180')) }}
+      device-farm-billing-method: ${{ inputs.device-farm-billing-method || 'UNMETERED' }}
       device-farm-project-arn: ${{ vars.SDK_DEVICE_FARM_PROJECT_ARN }}
       device-pools: ${{ vars.SDK_ANDROID_DEVICE_FARM_POOLS }}
       device-pool-name: ${{ inputs.android-device-pool }}
@@ -806,7 +823,8 @@ jobs:
       exclude-suite: ${{ inputs.exclude-suite }}
       include: ${{ inputs.include }}
       device-farm-timeout: ${{ fromJSON(inputs.device-farm-timeout || '120') }}
-      device-farm-start-timeout: ${{ fromJSON(inputs.device-farm-start-timeout || '15') }}
+      device-farm-start-timeout: ${{ fromJSON(inputs.device-farm-start-timeout || (inputs.device-farm-billing-method == 'METERED' && '15' || '180')) }}
+      device-farm-billing-method: ${{ inputs.device-farm-billing-method || 'UNMETERED' }}
       device-farm-project-arn: ${{ vars.SDK_DEVICE_FARM_PROJECT_ARN }}
       ios-device-pools: ${{ vars.SDK_IOS_DEVICE_FARM_POOLS }}
       device-pool-name: ${{ inputs.ios-device-pool }}
