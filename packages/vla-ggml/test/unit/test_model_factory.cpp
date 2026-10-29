@@ -202,16 +202,19 @@ TEST(VlaModelFactory, RejectsUnknownArchitecture) {
 // with no usable GPU at all must refuse with "matched no usable GPU device"
 // instead of quietly taking the CPU path and failing later
 // on a missing tensor. On a host that does have a GPU, selection succeeds and
-// that message must be absent; what follows is either the missing-tensor
-// error or, for a loader that allocates device buffers before it checks the
-// tensor list (pi05 on Metal), the strict "weight load failed" refusal. Both
+// that message must be absent. pi05 then allocates device buffers before it
+// checks the tensor list, and ggml returns no buffer for a context with no
+// tensors on every backend, so pi05 must hit the strict "weight load failed"
+// refusal. groot stops earlier on its missing embodiment metadata and smolvla
+// on a missing tensor, so for them only the absence is asserted. Both
 // branches are asserted so the test means something on CPU-only CI runners
 // and on GPU dev boxes alike.
 namespace {
 
 constexpr const char* NO_DEVICE_MESSAGE = "matched no usable GPU device";
+constexpr const char* WEIGHT_LOAD_MESSAGE = "weight load failed on";
 
-void expectOverrideStrictness(const char* arch) {
+void expectOverrideStrictness(const char* arch, bool gpuReachesWeightLoad) {
   const std::vector<std::string> override{"cuda"};
   // The loaders register dynamic backends on first load. Do it here too, or
   // the probe sees no GPU when this test runs first (--gtest_filter, shuffle).
@@ -235,6 +238,11 @@ void expectOverrideStrictness(const char* arch) {
       EXPECT_FALSE(refusedForNoDevice)
           << arch << ": a usable GPU exists, so the loader must not claim "
           << "there is none: " << what;
+      if (gpuReachesWeightLoad) {
+        EXPECT_NE(what.find(WEIGHT_LOAD_MESSAGE), std::string::npos)
+            << arch << ": the device weight load must refuse the override "
+            << "rather than fall back to CPU: " << what;
+      }
     } else {
       EXPECT_TRUE(refusedForNoDevice)
           << arch << ": no GPU for 'cuda', so the loader must refuse the "
@@ -249,15 +257,15 @@ void expectOverrideStrictness(const char* arch) {
 } // namespace
 
 TEST(VlaModelFactory, Pi05BackendOverrideNeverFallsBackToCpu) {
-  expectOverrideStrictness("pi05");
+  expectOverrideStrictness("pi05", /*gpuReachesWeightLoad=*/true);
 }
 
 TEST(VlaModelFactory, GrootBackendOverrideNeverFallsBackToCpu) {
-  expectOverrideStrictness("groot");
+  expectOverrideStrictness("groot", /*gpuReachesWeightLoad=*/false);
 }
 
 TEST(VlaModelFactory, SmolvlaBackendOverrideNeverFallsBackToCpu) {
-  expectOverrideStrictness("smolvla");
+  expectOverrideStrictness("smolvla", /*gpuReachesWeightLoad=*/false);
 }
 
 TEST(VlaModelFactory, AutoBackendStillFallsBackToCpu) {
@@ -280,6 +288,27 @@ TEST(VlaModelFactory, DescribeOverrideJoinsFamiliesWithCommas) {
   EXPECT_EQ(describeBackendOverride({}), "");
   EXPECT_EQ(describeBackendOverride({"cuda"}), "cuda");
   EXPECT_EQ(describeBackendOverride({"cuda", "vulkan"}), "cuda,vulkan");
+}
+
+TEST(VlaModelFactory, StrictGpuRefusalKeepsLoadErrorCode) {
+  using vla_backend_selection::StrictGpuFailure;
+  using vla_backend_selection::strictGpuRefusal;
+  const std::vector<std::string> override{"cuda", "vulkan"};
+  for (const StrictGpuFailure failure :
+       {StrictGpuFailure::NoDevice,
+        StrictGpuFailure::DeviceInitFailed,
+        StrictGpuFailure::WeightLoadFailed}) {
+    const std::string what = strictGpuRefusal(failure, override, "CUDA0");
+    // "backend: " would make index.js report INVALID_CONFIG instead of
+    // FAILED_TO_LOAD_WEIGHTS.
+    EXPECT_EQ(what.find("backend: "), std::string::npos) << what;
+    EXPECT_NE(what.find("'cuda,vulkan'"), std::string::npos) << what;
+    EXPECT_NE(what.find("not falling back to CPU"), std::string::npos) << what;
+  }
+  EXPECT_NE(
+      strictGpuRefusal(StrictGpuFailure::WeightLoadFailed, override, "CUDA0")
+          .find("weight load failed on CUDA0"),
+      std::string::npos);
 }
 
 TEST(VlaModelFactory, AutoInBackendListKeepsCpuFallback) {

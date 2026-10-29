@@ -1423,13 +1423,10 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   m->has_gpu = false;
 
   // Same rule as pi05LoadModel: a named backend never lands on CPU silently.
-  // PUBLIC ERROR-CODE CONTRACT: the strict throws below must not contain
-  // "backend: " (NATIVE_ERR_MARKERS.badBackend in src/index.ts), so the JS
-  // wrapper reports them as FAILED_TO_LOAD_WEIGHTS, as the docs promise.
+  using vla_backend_selection::StrictGpuFailure;
+  using vla_backend_selection::strictGpuRefusal;
   const bool strictGpu =
       vla_backend_selection::backendOverrideIsStrict(backendOverride);
-  const std::string overrideText =
-      vla_backend_selection::describeBackendOverride(backendOverride);
   if (!forceCpu) {
     ggml_backend_dev_t gpu =
         vla_backend_selection::pickBestGpuDevice(backendOverride);
@@ -1448,14 +1445,14 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
                 (ddesc != nullptr ? ddesc : "?") + ")");
       } else if (strictGpu) {
         throw std::runtime_error(
-            "grootLoadModel: backend override '" + overrideText +
-            "' selected a device but ggml_backend_dev_init returned null; "
-            "not falling back to CPU");
+            "grootLoadModel: " +
+            strictGpuRefusal(
+                StrictGpuFailure::DeviceInitFailed, backendOverride));
       }
     } else if (strictGpu) {
       throw std::runtime_error(
-          "grootLoadModel: backend override '" + overrideText +
-          "' matched no usable GPU device; not falling back to CPU");
+          "grootLoadModel: " +
+          strictGpuRefusal(StrictGpuFailure::NoDevice, backendOverride));
     }
   }
 
@@ -1664,9 +1661,10 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
       if (strictGpu) {
         // ~GrootModelInternal frees bufs_w, the GPU backend, gguf and ctx_w.
         throw std::runtime_error(
-            "grootLoadModel: backend override '" + overrideText +
-            "' GPU weight load failed on " + m->backend_name +
-            "; not falling back to CPU");
+            "grootLoadModel: " + strictGpuRefusal(
+                                     StrictGpuFailure::WeightLoadFailed,
+                                     backendOverride,
+                                     m->backend_name));
       }
       QLOG_IF(
           Priority::WARNING,

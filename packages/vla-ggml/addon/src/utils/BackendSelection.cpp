@@ -207,6 +207,27 @@ describeBackendOverride(const std::vector<std::string>& backendOverride) {
   return out;
 }
 
+std::string strictGpuRefusal(
+    StrictGpuFailure failure, const std::vector<std::string>& backendOverride,
+    const std::string& deviceName) {
+  std::string reason;
+  switch (failure) {
+  case StrictGpuFailure::NoDevice:
+    reason = "matched no usable GPU device";
+    break;
+  case StrictGpuFailure::DeviceInitFailed:
+    reason = "selected a device but ggml_backend_dev_init returned null";
+    break;
+  case StrictGpuFailure::WeightLoadFailed:
+    // Alloc, fopen and tensor read failures all land here, so the text does
+    // not blame the device memory.
+    reason = "weight load failed on " + deviceName;
+    break;
+  }
+  return "backend override '" + describeBackendOverride(backendOverride) +
+         "' " + reason + "; not falling back to CPU";
+}
+
 ggml_backend_dev_t pickBestGpuDevice(
     const DeviceInterface& devI,
     const std::vector<std::string>& backendOverride) {

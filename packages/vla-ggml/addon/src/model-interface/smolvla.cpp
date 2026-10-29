@@ -862,20 +862,18 @@ static bool tryInitGpuBackend(
         "smolvla_load_model: force_cpu=true — skipping GPU selection");
     return true;
   }
-  // PUBLIC ERROR-CODE CONTRACT: the strict load_error text below must not
-  // contain "backend: " (NATIVE_ERR_MARKERS.badBackend in src/index.ts), so the
-  // JS wrapper reports them as FAILED_TO_LOAD_WEIGHTS, as the docs promise.
+  // The refusal text comes from strictGpuRefusal, which owns the error-code
+  // contract.
+  using vla_backend_selection::StrictGpuFailure;
+  using vla_backend_selection::strictGpuRefusal;
   const bool strictGpu =
       vla_backend_selection::backendOverrideIsStrict(backendOverride);
-  const std::string overrideText =
-      vla_backend_selection::describeBackendOverride(backendOverride);
   ggml_backend_dev_t gpu =
       vla_backend_selection::pickBestGpuDevice(backendOverride);
   if (!gpu) {
     if (strictGpu) {
-      model.load_error = "backend override '" + overrideText +
-                         "' matched no usable GPU device; not falling back "
-                         "to CPU";
+      model.load_error =
+          strictGpuRefusal(StrictGpuFailure::NoDevice, backendOverride);
       return false;
     }
     return true;
@@ -883,9 +881,8 @@ static bool tryInitGpuBackend(
   ggml_backend_t gpuBackend = ggml_backend_dev_init(gpu, nullptr);
   if (!gpuBackend) {
     if (strictGpu) {
-      model.load_error = "backend override '" + overrideText +
-                         "' selected a device but ggml_backend_dev_init "
-                         "returned null; not falling back to CPU";
+      model.load_error =
+          strictGpuRefusal(StrictGpuFailure::DeviceInitFailed, backendOverride);
       return false;
     }
     return true;

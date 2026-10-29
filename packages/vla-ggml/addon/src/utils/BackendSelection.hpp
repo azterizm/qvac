@@ -105,4 +105,17 @@ ggml_backend_dev_t pickBestGpuDevice(
 std::string
 describeBackendOverride(const std::vector<std::string>& backendOverride);
 
+// Why a loader could not honour a strict override (backendOverrideIsStrict).
+enum class StrictGpuFailure { NoDevice, DeviceInitFailed, WeightLoadFailed };
+
+// Error text the three loaders share for a strict override they refuse to
+// run on CPU. `deviceName` is used only for WeightLoadFailed.
+//
+// PUBLIC ERROR-CODE CONTRACT: the text must not contain "backend: "
+// (NATIVE_ERR_MARKERS.badBackend in src/index.ts), so the JS wrapper reports
+// it as FAILED_TO_LOAD_WEIGHTS, as the docs promise.
+std::string strictGpuRefusal(
+    StrictGpuFailure failure, const std::vector<std::string>& backendOverride,
+    const std::string& deviceName = "");
+
 } // namespace vla_backend_selection
