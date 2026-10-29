@@ -24,11 +24,12 @@ API serves all three.
   Every sub-graph of all three models is parity-tested against a PyTorch
   reference at cos > 0.999.
 - **Cross-platform GPU acceleration** — Vulkan on Linux/Windows/Android-Mali,
-  Metal on Apple, OpenCL on Adreno 800+, CPU fallback everywhere else. On
-  Adreno the backend selector picks OpenCL (the path Qualcomm/qvac-fabric
-  actively maintain) and skips Vulkan because the Adreno Vulkan driver
-  produces numerically incorrect ggml output; older Adreno (< 800) falls
-  back to CPU. See `addon/src/utils/BackendSelection.cpp`.
+  Metal on Apple, OpenCL on Adreno 800+, CPU fallback everywhere else under
+  `'auto'`. On Adreno the backend selector picks OpenCL (the path
+  Qualcomm/qvac-fabric actively maintain) and skips Vulkan because the Adreno
+  Vulkan driver produces numerically incorrect ggml output; older Adreno
+  (< 800) falls back to CPU under `'auto'` and fails `load()` with a named
+  backend. See `addon/src/utils/BackendSelection.cpp`.
 - **Q8_0-quantized vision encoder** — vision-tower linear weights ship as Q8_0
   (~4× smaller than F32) with no measurable task-accuracy loss on LIBERO
   closed-loop eval. Other towers stay F32.
@@ -199,8 +200,8 @@ Non-Adreno GPUs are accepted. On Adreno hardware:
   OpenCL 3.0 support, kernel-compile failures on several ggml ops, and
   shared-memory OOMs).
 
-Under `'auto'`, when no acceptable GPU is found the addon falls back to CPU; to force CPU
-regardless, pass `backend: 'cpu'` to `load()`.
+Under `'auto'`, when no acceptable GPU is found the addon falls back to CPU;
+to force CPU regardless, pass `backend: 'cpu'` to `load()`.
 
 Among accepted devices the order is CUDA, then HIP/ROCm, then anything else
 (Vulkan or Metal). CUDA ships as a dynamically loaded module alongside Vulkan

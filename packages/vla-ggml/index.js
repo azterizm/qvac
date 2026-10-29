@@ -49,7 +49,7 @@ const NATIVE_ERR_MARKERS = Object.freeze({
     archMismatch: "config.embodiment is GR00T-only",
     // setEmbodiment refused because an inference job is dispatched but unawaited.
     inFlight: "an inference job is in flight",
-    // parseBackendOverride rejected a `backend` family name. Raised by
+    // parseBackendRequest rejected a `backend` family name. Raised by
     // createInstance before any weight I/O, so it is a config error, not a
     // weights failure. QVAC-23763.
     badBackend: "backend: ",

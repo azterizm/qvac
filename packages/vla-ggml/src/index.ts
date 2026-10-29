@@ -137,7 +137,7 @@ const NATIVE_ERR_MARKERS = Object.freeze({
   archMismatch: "config.embodiment is GR00T-only",
   // setEmbodiment refused because an inference job is dispatched but unawaited.
   inFlight: "an inference job is in flight",
-  // parseBackendOverride rejected a `backend` family name. Raised by
+  // parseBackendRequest rejected a `backend` family name. Raised by
   // createInstance before any weight I/O, so it is a config error, not a
   // weights failure. QVAC-23763.
   badBackend: "backend: ",
@@ -425,9 +425,11 @@ function validateRunInput(
     // `empty_camera_0`, masked out of attention at train time) is run by
     // dropping that trailing view; pi05Inference accepts the same range.
     const numCameras = hparams.numCameras;
-    if (typeof numCameras === "number" &&
+    if (
+      typeof numCameras === "number" &&
       Number.isInteger(numCameras) &&
-      input.images.length > numCameras) {
+      input.images.length > numCameras
+    ) {
       throw new QvacErrorAddonVla({
         code: ERR_CODES.INVALID_INPUT,
         adds: `pi05 takes 1..${numCameras} camera images (got ${input.images.length})`,
