@@ -10,9 +10,8 @@ inputs:
     required: true
   start-timeout-minutes:
     description: >-
-      Maximum minutes to wait for at least one run to enter RUNNING. Pass the
-      job's timeout-minutes: the wait gives up a few minutes earlier so it can
-      stop the queued runs and report why before GitHub cancels the job.
+      Maximum minutes to wait for a run to enter RUNNING. Pass the job's
+      timeout-minutes; the wait ends 3 minutes earlier to stop the runs itself.
     required: false
     default: "90"
   poll-interval-seconds:
@@ -21,10 +20,8 @@ inputs:
     default: "15"
   role-to-assume:
     description: >-
-      IAM role the job assumed through GitHub OIDC. When set, the wait re-assumes
-      it before the 1h OIDC session expires, so a run queued in
-      PENDING_CONCURRENCY for longer than an hour stays observable. Requires the
-      job's id-token: write permission.
+      Role the job assumed through OIDC. When set, credentials are renewed
+      before the 1h session expires. Needs id-token: write.
     required: false
     default: ""
 
@@ -122,15 +119,12 @@ runs:
           return JSON.parse(stdout);
         }
 
-        // configure-aws-credentials issues a 1h session for a role assumed through
-        // OIDC. Renew it well before then; a failed renewal is retried on the next
-        // poll while the current session still has time left.
+        // OIDC sessions last 1h. Renew at 45 min and retry every poll until expiry.
         const CREDENTIAL_TTL_MS = 60 * 60 * 1000;
         const CREDENTIAL_RENEW_MS = 45 * 60 * 1000;
         const CREDENTIAL_EXPIRY_MARGIN_MS = 2 * 60 * 1000;
         const CREDENTIAL_ENV_KEYS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'];
-        // The job's timeout-minutes equals the start timeout and also covers the
-        // steps before this one, so stop this much earlier to keep the timeout path.
+        // The job timeout equals the start timeout and includes earlier steps.
         const JOB_TIMEOUT_MARGIN_MS = 3 * 60 * 1000;
         const MAX_POLL_INTERVAL_SECONDS = 300;
         let credentialsIssuedAt = Date.now();
@@ -163,7 +157,7 @@ runs:
           const tokenFile = path.join(process.env.RUNNER_TEMP, `device-farm-wait-oidc-${process.pid}`);
           fs.writeFileSync(tokenFile, await requestOidcToken(), { mode: 0o600 });
 
-          // AssumeRoleWithWebIdentity is unsigned; keep the expiring session out of it.
+          // AssumeRoleWithWebIdentity needs no credentials; drop the expiring ones.
           const env = { ...process.env };
           CREDENTIAL_ENV_KEYS.forEach((key) => delete env[key]);
           let credentials;
@@ -202,8 +196,7 @@ runs:
           console.log(`[device-farm-wait] Renewed AWS credentials; expire ${credentials.Expiration}`);
         }
 
-        // Returns false once the session is about to expire and could not be
-        // renewed: every later get-run would fail and the wait would go blind.
+        // False when the session is about to expire and renewal failed.
         async function renewCredentialsIfDue(roleToAssume) {
           if (!roleToAssume || Date.now() - credentialsIssuedAt < CREDENTIAL_RENEW_MS) {
             return true;
@@ -276,7 +269,7 @@ runs:
           const platform = process.env.PLATFORM || 'mobile';
           const runArnsDirectory = process.env.RUN_ARNS_DIRECTORY || './run-arns';
           const timeoutMinutes = parsePositiveInteger(process.env.START_TIMEOUT_MINUTES, 90, 'START_TIMEOUT_MINUTES');
-          // Capped so a long interval cannot skip the credential renewal window.
+          // Capped so a long interval cannot skip credential renewal.
           const pollIntervalSeconds = Math.min(
             parsePositiveInteger(process.env.POLL_INTERVAL_SECONDS, 15, 'POLL_INTERVAL_SECONDS'),
             MAX_POLL_INTERVAL_SECONDS,

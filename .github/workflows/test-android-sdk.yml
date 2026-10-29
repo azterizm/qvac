@@ -56,10 +56,9 @@ on:
         default: 90
       device-farm-billing-method:
         description: >-
-          Device Farm billing method passed to schedule-run. UNMETERED uses the
-          account's fixed device slots, which every CI run shares; a run waits in
-          PENDING_CONCURRENCY while they are all busy. METERED bills pay-as-you-go
-          minutes and is the last resort when the slots stay busy.
+          Billing for schedule-run. UNMETERED: fixed slots shared by all CI; a run
+          waits in PENDING_CONCURRENCY while they are busy. METERED: pay-as-you-go,
+          last resort.
         required: false
         type: string
         default: UNMETERED
@@ -620,7 +619,7 @@ jobs:
           POOL_NAME: ${{ steps.select.outputs.name }}
           BILLING_METHOD: ${{ inputs.device-farm-billing-method }}
         run: |
-          # test-sdk.yml compares this case-insensitively; match it here.
+          # test-sdk.yml compares case-insensitively, so accept any case here too.
           BILLING_METHOD="${BILLING_METHOD^^}"
           case "$BILLING_METHOD" in
             UNMETERED|METERED) ;;
@@ -703,7 +702,7 @@ jobs:
           platform: android
           run-arns-directory: ./run-arns
           start-timeout-minutes: ${{ inputs.device-farm-start-timeout }}
-          # A queued UNMETERED run can outlive the 1h OIDC session.
+          # Renews AWS credentials while a run waits for a slot.
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
   run-producer:
@@ -1046,9 +1045,7 @@ jobs:
               STATUS=$(aws devicefarm get-run --arn "$RUN_ARN" --query 'run.status' --output text 2>/dev/null || echo "UNKNOWN")
               echo "Device $DEVICE_NAME: status=$STATUS"
 
-              # An UNMETERED run can still be queued (PENDING_CONCURRENCY, PENDING_DEVICE,
-              # SCHEDULING, ...) when the workflow is cancelled or times out. Stop every
-              # run that has not finished, or it takes a shared slot later for nobody.
+              # Stop queued runs too, or they take a shared slot after the workflow ends.
               if [ "$STATUS" != "COMPLETED" ] && [ "$STATUS" != "STOPPING" ]; then
                 echo "Stopping run: $RUN_ARN"
                 aws devicefarm stop-run --arn "$RUN_ARN" || true
