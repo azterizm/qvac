@@ -22,7 +22,7 @@ const fs = require('bare-fs')
 const os = require('bare-os')
 const path = require('bare-path')
 const process = require('bare-process')
-const { VlaModel, preprocessImage, padState } = require('../..')
+const { VlaModel, preprocessImage, padState, ERR_CODES } = require('../..')
 
 // ── Performance reporter ────────────────────────────────────────────────
 // Same shape as addon.test.js (smolvla) — a per-process singleton that
@@ -1101,7 +1101,11 @@ test(
         } catch (e) {
           rejectErr = e
         }
-        t.ok(rejectErr, `run() rejects ${label}`)
+        t.is(
+          rejectErr && rejectErr.code,
+          ERR_CODES.INVALID_INPUT,
+          `run() rejects ${label} as INVALID_INPUT`
+        )
       }
 
       const twoCam = inputs.images.slice(0, 2)
