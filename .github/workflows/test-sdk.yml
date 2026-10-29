@@ -104,10 +104,9 @@ on:
         description: "Desktop/Electron/Snap connection timeout (seconds)"
         type: number
         default: 60
-      # Replaced device-farm-start-timeout (dispatch is at the 25-input limit).
-      # The wait now follows the billing method; workflow_call still takes a timeout.
+      # Replaced device-farm-start-timeout: dispatch is at the 25-input limit.
       device-farm-billing-method:
-        description: "Device Farm billing (UNMETERED: shared slots, may queue; METERED: pay-as-you-go)"
+        description: "Device Farm billing (METERED = pay-as-you-go, last resort)"
         type: choice
         options:
           - UNMETERED
@@ -169,11 +168,11 @@ on:
         type: number
         default: 120
       device-farm-billing-method:
-        description: "Device Farm billing: UNMETERED (shared slots) or METERED (pay-as-you-go, last resort)"
+        description: "Device Farm billing: UNMETERED or METERED"
         type: string
         default: UNMETERED
       device-farm-start-timeout:
-        description: "Minutes to wait for a Device Farm run to start. 0 = 180 for UNMETERED, 15 for METERED."
+        description: "Device Farm start wait (minutes); 0 = 180 UNMETERED, 15 METERED"
         type: number
         default: 0
       android-device-pool:

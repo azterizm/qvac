@@ -9,9 +9,7 @@ inputs:
     description: "Directory containing one .txt file per scheduled Device Farm run ARN."
     required: true
   start-timeout-minutes:
-    description: >-
-      Maximum minutes to wait for a run to enter RUNNING. Pass the job's
-      timeout-minutes; the wait ends 3 minutes earlier to stop the runs itself.
+    description: "Maximum minutes to wait for a run to enter RUNNING (ends 3 min early)."
     required: false
     default: "90"
   poll-interval-seconds:
@@ -19,9 +17,7 @@ inputs:
     required: false
     default: "15"
   role-to-assume:
-    description: >-
-      Role the job assumed through OIDC. When set, credentials are renewed
-      before the 1h session expires. Needs id-token: write.
+    description: "OIDC role to re-assume before the 1h session expires."
     required: false
     default: ""
 
@@ -119,12 +115,12 @@ runs:
           return JSON.parse(stdout);
         }
 
-        // OIDC sessions last 1h. Renew at 45 min and retry every poll until expiry.
+        // OIDC sessions last 1h; renew at 45 min.
         const CREDENTIAL_TTL_MS = 60 * 60 * 1000;
         const CREDENTIAL_RENEW_MS = 45 * 60 * 1000;
         const CREDENTIAL_EXPIRY_MARGIN_MS = 2 * 60 * 1000;
         const CREDENTIAL_ENV_KEYS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'];
-        // The job timeout equals the start timeout and includes earlier steps.
+        // The job timeout also covers earlier steps; stop before it.
         const JOB_TIMEOUT_MARGIN_MS = 3 * 60 * 1000;
         const MAX_POLL_INTERVAL_SECONDS = 300;
         let credentialsIssuedAt = Date.now();
@@ -157,7 +153,7 @@ runs:
           const tokenFile = path.join(process.env.RUNNER_TEMP, `device-farm-wait-oidc-${process.pid}`);
           fs.writeFileSync(tokenFile, await requestOidcToken(), { mode: 0o600 });
 
-          // AssumeRoleWithWebIdentity needs no credentials; drop the expiring ones.
+          // Unsigned call; drop the expiring credentials.
           const env = { ...process.env };
           CREDENTIAL_ENV_KEYS.forEach((key) => delete env[key]);
           let credentials;
@@ -269,7 +265,7 @@ runs:
           const platform = process.env.PLATFORM || 'mobile';
           const runArnsDirectory = process.env.RUN_ARNS_DIRECTORY || './run-arns';
           const timeoutMinutes = parsePositiveInteger(process.env.START_TIMEOUT_MINUTES, 90, 'START_TIMEOUT_MINUTES');
-          // Capped so a long interval cannot skip credential renewal.
+          // Cap so renewal is never skipped.
           const pollIntervalSeconds = Math.min(
             parsePositiveInteger(process.env.POLL_INTERVAL_SECONDS, 15, 'POLL_INTERVAL_SECONDS'),
             MAX_POLL_INTERVAL_SECONDS,
